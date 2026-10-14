@@ -1,0 +1,147 @@
+/**
+ * Snake game state (mirrors backend SnakeGame.SnakeGameState)
+ */
+export interface SnakePosition {
+  x: number
+  y: number
+}
+
+export interface SnakeFood extends SnakePosition {
+  radius: number
+  value: number
+}
+
+export interface SnakeSnake {
+  playerId: string
+  body: SnakePosition[]
+  angle: number
+  targetAngle: number
+  boosting: boolean
+  alive: boolean
+  score: number
+  maxLength: number
+  diedAt: number
+}
+
+export interface SnakeGameState {
+  snakes: Record<string, SnakeSnake>
+  food: SnakeFood[]
+  state: 'WAITING' | 'IN_PROGRESS' | 'FINISHED'
+  gridWidth: number
+  gridHeight: number
+}
+
+/**
+ * Tank game state (mirrors backend TankGame.TankGameState)
+ */
+export interface TankTank {
+  playerId: string
+  x: number
+  y: number
+  angle: number
+  health: number
+  score: number
+  alive: boolean
+  radius: number
+  shootCooldown: number
+  diedAt: number
+}
+
+export interface TankBullet {
+  x: number
+  y: number
+  angle: number
+  ownerId: string
+  life: number
+  damage: number
+}
+
+export interface TankWall {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface TankInput {
+  forward: boolean
+  backward: boolean
+  turnLeft: boolean
+  turnRight: boolean
+  shoot: boolean
+}
+
+export interface TankGameState {
+  tanks: Record<string, TankTank>
+  bullets: TankBullet[]
+  walls: TankWall[]
+  state: 'WAITING' | 'IN_PROGRESS' | 'FINISHED'
+  mapWidth: number
+  mapHeight: number
+}
+
+/**
+ * Chess state (mirrors backend ChessGame.ChessGameState)
+ */
+export type PieceColor = 'WHITE' | 'BLACK'
+export type PieceType = 'KING' | 'QUEEN' | 'ROOK' | 'BISHOP' | 'KNIGHT' | 'PAWN'
+
+export interface ChessPiece {
+  type: PieceType
+  color: PieceColor
+  x: number
+  y: number
+  hasMoved: boolean
+}
+
+export interface ChessGameState {
+  pieces: Record<string, ChessPiece>
+  currentPlayer: string | null
+  status: 'IN_PROGRESS' | 'FINISHED' | 'DRAW'
+  moveHistory: string[]
+  whitePlayer?: string | null
+  blackPlayer?: string | null
+  winner?: string | null
+  check?: boolean
+  legalMoves: ChessMove[]
+}
+
+export interface ChessMove {
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
+  promotion?: PieceType
+}
+
+/**
+ * Chinese Chess state
+ */
+export type XiangqiPieceColor = 'RED' | 'BLACK'
+export type XiangqiPieceType = 'GENERAL' | 'ADVISOR' | 'ELEPHANT' | 'HORSE' | 'CHARIOT' | 'CANNON' | 'SOLDIER'
+
+export interface XiangqiPiece {
+  type: XiangqiPieceType
+  color: XiangqiPieceColor
+  x: number
+  y: number
+}
+
+export interface XiangqiGameState {
+  pieces: Record<string, XiangqiPiece>
+  currentPlayer: string | null
+  status: 'IN_PROGRESS' | 'FINISHED' | 'DRAW'
+  moveHistory: string[]
+  redPlayer?: string | null
+  blackPlayer?: string | null
+  winner?: string | null
+  check?: boolean
+  legalMoves: XiangqiMove[]
+}
+
+export interface XiangqiMove {
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
+}

@@ -1,0 +1,52 @@
+package com.brim.game.model.dto;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import lombok.Data;
+import org.springframework.stereotype.Component;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+@Data
+public class GameRoom {
+    private String id;
+    private String name;
+    private GameType gameType;
+    private RoomStatus status;
+    private List<Player> players = new ArrayList<>();
+    private int maxPlayers;
+    private String hostId;
+    private GameSettings settings;
+    private LocalDateTime createdAt;
+    private LocalDateTime startedAt;
+    private LocalDateTime endedAt;
+
+    public static GameRoom create(String name, GameType gameType, String hostId, int maxPlayers, GameSettings settings) {
+        GameRoom room = new GameRoom();
+        room.id = UUID.randomUUID().toString();
+        room.name = name;
+        room.gameType = gameType;
+        room.status = RoomStatus.WAITING;
+        room.maxPlayers = maxPlayers;
+        room.hostId = hostId;
+        room.settings = settings;
+        room.createdAt = LocalDateTime.now();
+        return room;
+    }
+
+    public List<Player> getPlayers() {
+        if (players == null) players = new ArrayList<>();
+        return players;
+    }
+
+    public boolean canJoin() {
+        return status == RoomStatus.WAITING && getPlayers().size() < maxPlayers;
+    }
+
+    @JsonIgnore
+    public boolean isFull() {
+        return getPlayers().size() >= maxPlayers;
+    }
+}
