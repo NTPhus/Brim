@@ -33,7 +33,7 @@ export class SnakeScene extends Phaser.Scene {
     this.interpolateBodies(state)
     this.updateCamera(state)
     this.graphics.clear()
-    this.drawArena(state.gridWidth, state.gridHeight)
+    this.drawArena()
     this.drawFood(state.food)
     this.drawSnakes(state)
   }
@@ -74,12 +74,15 @@ export class SnakeScene extends Phaser.Scene {
     }
   }
 
-  private drawArena(width: number, height: number) {
+  private drawArena() {
+    const width = this.targetState?.gridWidth ?? 0
+    const height = this.targetState?.gridHeight ?? 0
+    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 120, 120)
     this.graphics.fillStyle(0x070b17, 1)
-    this.graphics.fillRect(0, 0, width, height)
+    this.graphics.fillRect(view.x, view.y, view.width, view.height)
     this.graphics.lineStyle(1, 0x17213b, 0.42)
-    for (let x = 0; x <= width; x += 100) this.graphics.lineBetween(x, 0, x, height)
-    for (let y = 0; y <= height; y += 100) this.graphics.lineBetween(0, y, width, y)
+    for (let x = Math.floor(view.x / 100) * 100; x <= view.right; x += 100) this.graphics.lineBetween(x, view.y, x, view.bottom)
+    for (let y = Math.floor(view.y / 100) * 100; y <= view.bottom; y += 100) this.graphics.lineBetween(view.x, y, view.right, y)
     this.graphics.lineStyle(8, 0x405174, 1)
     this.graphics.strokeRect(4, 4, width - 8, height - 8)
   }
@@ -104,20 +107,49 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private drawSnakes(state: SnakeGameState) {
+    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 120, 120)
     let colorIndex = 0
     for (const [id, snake] of Object.entries(state.snakes)) {
       const body = this.renderBodies.get(id)
       if (!body?.length) continue
-      const color = id === this.playerId ? 0x38e88f : SNAKE_COLORS[++colorIndex % SNAKE_COLORS.length]
+      const color = snake.color && /^#[0-9a-fA-F]{6}$/.test(snake.color)
+        ? parseInt(snake.color.slice(1), 16)
+        : (id === this.playerId ? 0x38e88f : SNAKE_COLORS[++colorIndex % SNAKE_COLORS.length])
       const alpha = snake.alive ? 1 : 0.18
-      const thickness = Phaser.Math.Clamp(13 + Math.log2(Math.max(18, snake.maxLength) / 18) * 2.2, 13, 25)
+      const thickness = Phaser.Math.Clamp(13 + Math.log2(Math.max(18, snake.maxLength) / 18) * 3.6, 13, 42)
 
+      // Long bodies are sampled and off-screen snakes are skipped to keep redraws cheap
+      // while preserving the smooth head and nearby body motion.
+      if (!view.contains(body[0].x, body[0].y) && !body.some(point => view.contains(point.x, point.y))) continue
+      const stride = body.length > 500 ? 2 : 1
+      const visibleBody = body.filter((point, index) => index % stride === 0 || view.contains(point.x, point.y))
+      if (visibleBody.length < 2) continue
       this.graphics.lineStyle(thickness + 5, 0x05070e, alpha * .55)
-      this.strokeBody(body)
+      this.strokeBody(visibleBody)
       this.graphics.lineStyle(thickness, color, alpha)
-      this.strokeBody(body)
+      this.strokeBody(visibleBody)
+      // Round the tube with small overlapping caps so the body does not look square.
+      this.graphics.fillStyle(color, alpha)
+      const capStep = Math.max(2, Math.ceil(visibleBody.length / 180))
+      for (let i = 0; i < visibleBody.length; i += capStep) {
+        const segment = visibleBody[i]
+        this.graphics.fillCircle(segment.x, segment.y, thickness * .5)
+      }
+      this.graphics.lineStyle(Math.max(2, thickness * .22), 0xffffff, alpha * .24)
+      this.strokeBody(visibleBody)
+
+      const detailStep = Math.max(8, Math.floor(visibleBody.length / 36))
+      this.graphics.fillStyle(0xffffff, alpha * .16)
+      for (let i = detailStep; i < visibleBody.length; i += detailStep) {
+        const segment = visibleBody[i]
+        this.graphics.fillCircle(segment.x, segment.y, Math.max(2, thickness * .16))
+      }
 
       const head = body[0]
+      if (snake.boosting) {
+        this.graphics.lineStyle(3, 0xfbbf24, .45)
+        this.graphics.strokeCircle(head.x, head.y, thickness * .95)
+      }
       this.graphics.fillStyle(color, alpha)
       this.graphics.fillCircle(head.x, head.y, thickness * .58)
       if (!snake.alive) continue

@@ -61,6 +61,28 @@ button:disabled {
   transform: none;
 }
 
+.color-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .2rem .35rem;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 999px;
+  background: rgba(255,255,255,.07);
+  color: var(--text-secondary);
+  font-size: .78rem;
+}
+
+.color-picker input[type="color"] {
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
 button.secondary {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);

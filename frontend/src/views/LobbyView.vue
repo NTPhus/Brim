@@ -152,7 +152,7 @@ function statusLabel(status: string) {
 
     <section class="leaderboard-panel">
       <div class="section-heading">
-        <div><span class="eyebrow">LIVE RANKING</span><h2>🏆 Bảng xếp hạng</h2></div>
+        <div><span class="eyebrow">LIVE • HÔM NAY</span><h2>🏆 Bảng xếp hạng ngày</h2></div>
         <span class="live-dot">● LIVE</span>
       </div>
       <div class="ranking-grid">

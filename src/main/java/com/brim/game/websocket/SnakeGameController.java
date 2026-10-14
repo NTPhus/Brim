@@ -49,6 +49,7 @@ public class SnakeGameController {
             if (player.getUsername() != null && !player.getUsername().isBlank()) {
                 p.setUsername(player.getUsername());
             }
+            if (player.getColor() != null) p.setColor(player.getColor());
         } else {
             if (!room.canJoin()) {
                 sendError(player.getSessionId(), "Room not found or full");
@@ -66,7 +67,7 @@ public class SnakeGameController {
         roomService.saveRoom(room);
 
         SnakeGame game = activeGames.computeIfAbsent(roomId, k -> new SnakeGame(
-                roomId, 4000, 2400, 3, 50
+                roomId, 6000, 3600, 3, 50
         ));
         if (!game.getSnakes().containsKey(player.getId())) {
             game.addPlayer(player);
@@ -92,6 +93,18 @@ public class SnakeGameController {
 
         MovePayload payload = message.getPayload();
         if (payload != null) game.handleInput(message.getPlayerId(), payload.angle(), payload.boosting());
+    }
+
+    @MessageMapping("/snake/{roomId}/color")
+    public void playerColor(@DestinationVariable String roomId, GameMessage<ColorPayload> message) {
+        SnakeGame game = activeGames.get(roomId);
+        if (game != null && message.getPayload() != null) {
+            String color = message.getPayload().color();
+            game.setColor(message.getPlayerId(), color);
+            var room = roomService.getRoom(roomId);
+            if (room != null) room.getPlayers().stream().filter(p -> p.getId().equals(message.getPlayerId())).findFirst().ifPresent(p -> p.setColor(color));
+            broadcastGameState(roomId, game.getGameState());
+        }
     }
 
     @MessageMapping("/snake/{roomId}/ready")
@@ -140,11 +153,11 @@ public class SnakeGameController {
         // Always initialize a fresh game
         SnakeGame previous = activeGames.get(roomId);
         if (previous != null) previous.setState(SnakeGame.GameState.FINISHED);
-        SnakeGame game = new SnakeGame(roomId, 4000, 2400, 3, 50);
+        SnakeGame game = new SnakeGame(roomId, 6000, 3600, 3, 50);
         for (Player p : room.getPlayers()) {
             game.addPlayer(p);
         }
-        addAutomaticBots(game, 8);
+        addAutomaticBots(game, 4);
         game.setState(SnakeGame.GameState.IN_PROGRESS);
         activeGames.put(roomId, game);
 
@@ -212,17 +225,21 @@ public class SnakeGameController {
     private void publishScoreDeltas(String roomId, SnakeGame game, Map<String, Integer> published) {
         var room = roomService.getRoom(roomId);
         if (room == null) return;
-        room.getPlayers().stream().filter(player -> !player.getId().startsWith("bot-")).forEach(player -> {
-            SnakeGame.Snake snake = game.getSnakes().get(player.getId());
+        game.getSnakes().values().forEach(snake -> {
             if (snake == null) return;
-            int previous = published.getOrDefault(player.getId(), 0);
-            if (snake.getScore() < previous) previous = 0;
+            int previous = published.getOrDefault(snake.getPlayerId(), 0);
+            if (snake.getScore() < previous) {
+                // Dash spends score; only positive score deltas belong on the daily board.
+                published.put(snake.getPlayerId(), snake.getScore());
+                return;
+            }
             int delta = snake.getScore() - previous;
             if (delta > 0) eventProducer.sendLeaderboardScore(roomId,
-                    new GameScoreEvent(player.getId(), player.getUsername(), GameType.SNAKE, delta));
-            published.put(player.getId(), snake.getScore());
+                    new GameScoreEvent(snake.getPlayerId(), snake.getUsername(), GameType.SNAKE, delta));
+            published.put(snake.getPlayerId(), snake.getScore());
         });
     }
 
     public record MovePayload(double angle, boolean boosting) {}
+    public record ColorPayload(String color) {}
 }

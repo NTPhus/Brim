@@ -57,6 +57,13 @@ npm install
 npm run dev     # http://localhost:3000
 ```
 
+### Chơi multiplayer trong mạng LAN
+Backend và Vite dev server đã bind trên mọi interface mạng. Lấy IP LAN của máy host (ví dụ `192.168.1.25`) rồi cho người chơi khác mở:
+```
+http://192.168.1.25:3000
+```
+Mọi người cần cùng mạng LAN, máy host phải cho phép TCP port `3000` qua firewall. Vite sẽ proxy REST và SockJS/WebSocket `/api` về backend port `8080`, vì vậy người chơi chỉ cần mở port `3000`. Khi host qua Internet, cần port forward hoặc reverse proxy HTTPS cho port `3000` và dùng domain/IP công khai.
+
 ### 4. Build Frontend for production
 ```bash
 cd frontend && npm run build   # output: dist/

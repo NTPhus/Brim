@@ -56,6 +56,7 @@ const isCheck = computed(() => {
   if (!gameState.value) return false
   return gameState.value.check ?? false
 })
+const lastMove = computed(() => gameState.value?.lastMove ?? null)
 
 const legalTargets = computed(() => {
   if (!selectedCell.value) return new Set<string>()
@@ -78,6 +79,9 @@ const STATUS_TEXT = computed(() => {
 function pieceKey(piece: ChessPiece): string {
   return `${piece.type}_${piece.color}`
 }
+
+// Keep White at the bottom of the board, as on a physical chessboard.
+function boardY(row: number): number { return 8 - row }
 
 function onCellClick(x: number, y: number) {
   error.value = null
@@ -261,24 +265,33 @@ async function handleGoToLobby() {
               v-for="col in 8"
               :key="`c${col}`"
               :class="[(row + col) % 2 === 0 ? 'light' : 'dark', {
-                selected: selectedCell?.x === col - 1 && selectedCell?.y === row - 1,
-                'legal-target': legalTargets.has(`${col - 1},${row - 1}`),
-                capture: legalTargets.has(`${col - 1},${row - 1}`) && !!pieceAt[`${col - 1},${row - 1}`]
+                selected: selectedCell?.x === col - 1 && selectedCell?.y === boardY(row),
+                'last-from': lastMove?.fromX === col - 1 && lastMove?.fromY === boardY(row),
+                'last-to': lastMove?.toX === col - 1 && lastMove?.toY === boardY(row),
+                'legal-target': legalTargets.has(`${col - 1},${boardY(row)}`),
+                capture: legalTargets.has(`${col - 1},${boardY(row)}`) && !!pieceAt[`${col - 1},${boardY(row)}`]
               }]"
-              @click="onCellClick(col - 1, row - 1)"
+              @click="onCellClick(col - 1, boardY(row))"
             >
               <span
-                v-if="pieceAt[`${col - 1},${row - 1}`]"
+                v-if="pieceAt[`${col - 1},${boardY(row)}`]"
                 class="piece"
-                :class="pieceAt[`${col - 1},${row - 1}`]?.color === 'WHITE' ? 'white' : 'black'"
+                :class="pieceAt[`${col - 1},${boardY(row)}`]?.color === 'WHITE' ? 'white' : 'black'"
               >
-                {{ PIECE_SYMBOLS[pieceKey(pieceAt[`${col - 1},${row - 1}`]!)] }}
+                {{ PIECE_SYMBOLS[pieceKey(pieceAt[`${col - 1},${boardY(row)}`]!)] }}
               </span>
-              <span v-if="selectedCell?.x === col - 1 && selectedCell?.y === row - 1" class="selected-ring" />
-              <span v-else-if="legalTargets.has(`${col - 1},${row - 1}`)" class="move-preview" />
+              <span v-if="selectedCell?.x === col - 1 && selectedCell?.y === boardY(row)" class="selected-ring" />
+              <span v-else-if="legalTargets.has(`${col - 1},${boardY(row)}`)" class="move-preview" />
             </div>
           </div>
         </div>
+
+        <aside class="history" v-if="gameState?.moveHistory?.length">
+          <h4>Lịch sử nước đi</h4>
+          <div class="move-list">
+            <span v-for="(move, i) in gameState.moveHistory" :key="i" class="move-item">{{ i + 1 }}. {{ move }}</span>
+          </div>
+        </aside>
 
         <div v-if="isMyTurn && !isCheck" class="move-hint">
           💡 Nhấp vào quân của bạn để chọn, sau đó nhấp vào ô muốn đi
@@ -302,12 +315,6 @@ async function handleGoToLobby() {
       </div>
     </div>
 
-    <div class="history" v-if="gameState?.moveHistory?.length">
-      <h4>Lịch sử nước đi</h4>
-      <div class="move-list">
-        <span v-for="(move, i) in gameState.moveHistory" :key="i" class="move-item">{{ i + 1 }}. {{ move }}</span>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -318,7 +325,7 @@ async function handleGoToLobby() {
   align-items: center;
   gap: 1rem;
   width: 100%;
-  max-width: 680px;
+  max-width: 920px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
@@ -374,13 +381,19 @@ async function handleGoToLobby() {
   width: 100%;
   display: flex;
   justify-content: center;
+  gap: 1rem;
+  align-items: flex-start;
 }
 
 .board-container {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) 210px;
+  gap: 0.8rem;
   align-items: center;
 }
+
+.board-container > .board { grid-column: 1; }
+.board-container > .history { grid-column: 2; grid-row: 1 / span 3; }
 
 .board {
   display: flex;
@@ -417,6 +430,9 @@ async function handleGoToLobby() {
 .board-row > div.selected {
   background-color: #7fa650 !important;
 }
+
+.board-row > div.last-from { box-shadow: inset 0 0 0 4px rgba(251, 191, 36, .55); }
+.board-row > div.last-to { background-color: rgba(250, 204, 21, .68) !important; }
 
 .board-row > div.legal-target { background-color: #a9c96b !important; }
 
@@ -529,11 +545,17 @@ async function handleGoToLobby() {
 }
 
 .history {
-  width: 100%;
+  width: 210px;
   background: var(--bg-card);
   padding: 1rem;
   border-radius: 12px;
   border: 1px solid var(--border);
+}
+
+@media (max-width: 760px) {
+  .board-container { grid-template-columns: 1fr; }
+  .board-container > .history { grid-column: 1; grid-row: auto; width: 100%; }
+  .board-row > div { width: min(11vw, 56px); height: min(11vw, 56px); }
 }
 
 .history h4 {

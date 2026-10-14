@@ -59,6 +59,7 @@ const isMyTurn = computed(
 )
 
 const isCheck = computed(() => gameState.value?.check ?? false)
+const lastMove = computed(() => gameState.value?.lastMove ?? null)
 
 const legalTargets = computed(() => {
   if (!selectedCell.value) return new Set<string>()
@@ -66,6 +67,14 @@ const legalTargets = computed(() => {
     .filter(move => move.fromX === selectedCell.value!.x && move.fromY === selectedCell.value!.y)
     .map(move => `${move.toX},${move.toY}`))
 })
+
+function pieceLabel(piece: XiangqiPiece): string {
+  const labels: Record<string, [string, string]> = {
+    GENERAL: ['帥', '將'], ADVISOR: ['仕', '士'], ELEPHANT: ['相', '象'],
+    HORSE: ['傌', '馬'], CHARIOT: ['俥', '車'], CANNON: ['炮', '砲'], SOLDIER: ['兵', '卒']
+  }
+  return labels[piece.type]?.[piece.color === 'RED' ? 0 : 1] ?? PIECE_LABELS[piece.type]
+}
 
 watch(() => gameState.value?.currentPlayer, () => {
   selectedCell.value = null
@@ -251,6 +260,8 @@ function handleRestart() {
             class="cell"
             :class="{
               selected: selectedCell?.x === (c - 1) && selectedCell?.y === (r - 1),
+              'last-from': lastMove?.fromX === c - 1 && lastMove?.fromY === r - 1,
+              'last-to': lastMove?.toX === c - 1 && lastMove?.toY === r - 1,
               'legal-target': legalTargets.has(`${c - 1},${r - 1}`),
               capture: legalTargets.has(`${c - 1},${r - 1}`) && !!pieceAt[`${c - 1},${r - 1}`]
             }"
@@ -262,7 +273,7 @@ function handleRestart() {
               :class="pieceAt[`${c - 1},${r - 1}`]?.color === 'RED' ? 'red' : 'black'"
             >
               <span class="piece-label">
-                {{ PIECE_LABELS[pieceAt[`${c - 1},${r - 1}`]!.type] }}
+                {{ pieceLabel(pieceAt[`${c - 1},${r - 1}`]!) }}
               </span>
             </span>
             <span v-if="selectedCell?.x === (c - 1) && selectedCell?.y === (r - 1)" class="selected-ring" />
@@ -270,6 +281,13 @@ function handleRestart() {
           </div>
         </div>
       </div>
+
+      <aside class="history" v-if="gameState?.moveHistory?.length">
+        <h4>Lịch sử nước đi</h4>
+        <div class="move-list">
+          <span v-for="(move, i) in gameState.moveHistory" :key="i" class="move-item">{{ i + 1 }}. {{ move }}</span>
+        </div>
+      </aside>
 
       <!-- Game Over Modal Overlay -->
       <div v-if="isGameOver" class="modal-overlay">
@@ -297,7 +315,7 @@ function handleRestart() {
   align-items: center;
   gap: 1rem;
   width: 100%;
-  max-width: 600px;
+  max-width: 900px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
@@ -360,6 +378,8 @@ function handleRestart() {
   width: 100%;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  gap: 1rem;
 }
 
 .xiangqi-board {
@@ -393,6 +413,9 @@ function handleRestart() {
 .cell.selected {
   background: rgba(46, 204, 113, 0.3);
 }
+
+.cell.last-from { box-shadow: inset 0 0 0 3px rgba(251, 191, 36, .6); }
+.cell.last-to { background: rgba(250, 204, 21, .62); }
 
 .cell.legal-target { background: rgba(46, 204, 113, 0.28); }
 
@@ -452,6 +475,17 @@ function handleRestart() {
   height: 100%;
   border: 3px solid #2ecc71;
   pointer-events: none;
+}
+
+.history { width: 210px; background: var(--bg-card); padding: 1rem; border-radius: 12px; border: 1px solid var(--border); }
+.history h4 { margin: 0 0 .5rem; font-size: .85rem; color: var(--text-secondary); }
+.move-list { display: flex; flex-direction: column; gap: .35rem; max-height: 360px; overflow-y: auto; }
+.move-item { background: rgba(255,255,255,.05); padding: .25rem .45rem; border-radius: 4px; font-size: .75rem; font-family: monospace; }
+
+@media (max-width: 760px) {
+  .board-wrapper { flex-direction: column; align-items: center; }
+  .history { width: 100%; }
+  .cell { width: min(10vw, 52px); height: min(10vw, 52px); }
 }
 
 .modal-overlay {

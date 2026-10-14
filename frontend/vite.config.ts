@@ -13,6 +13,8 @@ export default defineConfig({
     }
   },
   server: {
+    // Allow other devices on the LAN to open the dev server using this machine's IP.
+    host: true,
     port: 3000,
     proxy: {
       '/api': {

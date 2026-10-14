@@ -16,6 +16,7 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
     private GameStatus status = GameStatus.IN_PROGRESS;
     private String winner;
     private final List<String> moveHistory = new ArrayList<>();
+    private ChineseChessMove lastMove;
 
     public ChineseChessGame(String roomId) { this(roomId, "MEDIUM"); }
 
@@ -37,6 +38,7 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
         }
 
         board.executeMove(chessMove);
+        lastMove = chessMove;
         moveHistory.add(chessMove.toString());
         switchPlayer();
         checkGameEnd();
@@ -50,7 +52,7 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
                 .filter(piece -> piece.getColor() == currentColor)
                 .flatMap(piece -> generateXiangqiMoves(piece, currentColor).stream())
                 .toList();
-        return new ChineseChessGameState(board.getPieces(), currentPlayer, status, moveHistory, player1, player2, winner, legalMoves);
+        return new ChineseChessGameState(board.getPieces(), currentPlayer, status, moveHistory, player1, player2, winner, legalMoves, lastMove);
     }
 
     @Override
@@ -473,8 +475,9 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
         private final String blackPlayer;
         private final String winner;
         private final List<ChineseChessMove> legalMoves;
+        private final ChineseChessMove lastMove;
 
-        public ChineseChessGameState(Map<String, ChineseChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String redPlayer, String blackPlayer, String winner, List<ChineseChessMove> legalMoves) {
+        public ChineseChessGameState(Map<String, ChineseChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String redPlayer, String blackPlayer, String winner, List<ChineseChessMove> legalMoves, ChineseChessMove lastMove) {
             this.pieces = pieces;
             this.currentPlayer = currentPlayer;
             this.status = status;
@@ -483,6 +486,7 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
             this.blackPlayer = blackPlayer;
             this.winner = winner;
             this.legalMoves = legalMoves;
+            this.lastMove = lastMove;
         }
     }
 }

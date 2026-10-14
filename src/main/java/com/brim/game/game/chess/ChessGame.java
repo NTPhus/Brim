@@ -16,6 +16,7 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
     private GameStatus status = GameStatus.IN_PROGRESS;
     private String winner;
     private final List<String> moveHistory = new ArrayList<>();
+    private ChessMove lastMove;
 
     public ChessGame(String roomId) { this(roomId, "MEDIUM"); }
 
@@ -37,6 +38,7 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
         }
 
         board.executeMove(chessMove);
+        lastMove = chessMove;
         moveHistory.add(chessMove.toString());
         switchPlayer();
         checkGameEnd();
@@ -50,7 +52,7 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
                 .filter(piece -> piece.getColor() == currentColor)
                 .flatMap(piece -> generateLegalMovesForPiece(piece, currentColor).stream())
                 .toList();
-        return new ChessGameState(board.getPieces(), currentPlayer, status, moveHistory, player1, player2, winner, legalMoves);
+        return new ChessGameState(board.getPieces(), currentPlayer, status, moveHistory, player1, player2, winner, legalMoves, lastMove);
     }
 
     @Override
@@ -411,8 +413,9 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
         private final String blackPlayer;
         private final String winner;
         private final List<ChessMove> legalMoves;
+        private final ChessMove lastMove;
 
-        public ChessGameState(Map<String, ChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String whitePlayer, String blackPlayer, String winner, List<ChessMove> legalMoves) {
+        public ChessGameState(Map<String, ChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String whitePlayer, String blackPlayer, String winner, List<ChessMove> legalMoves, ChessMove lastMove) {
             this.pieces = pieces;
             this.currentPlayer = currentPlayer;
             this.status = status;
@@ -421,6 +424,7 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
             this.blackPlayer = blackPlayer;
             this.winner = winner;
             this.legalMoves = legalMoves;
+            this.lastMove = lastMove;
         }
     }
 }

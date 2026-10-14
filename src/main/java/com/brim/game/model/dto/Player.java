@@ -14,6 +14,8 @@ public class Player {
     private int score;
     private boolean ready;
     private PlayerState state;
+    /** Preferred player color, encoded as #RRGGBB for the realtime game renderers. */
+    private String color;
 
     public enum PlayerState {
         WAITING, PLAYING, SPECTATING, DISCONNECTED, FINISHED

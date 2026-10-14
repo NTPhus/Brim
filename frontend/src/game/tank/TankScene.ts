@@ -33,36 +33,48 @@ export class TankScene extends Phaser.Scene {
     if (!this.lastState) return
     this.graphics.clear()
     this.updateCamera(this.lastState)
-    this.drawBackground(this.lastState)
+    this.drawBackground()
     this.drawWalls(this.lastState)
+    this.drawHealthPacks(this.lastState)
     this.drawTanks(this.lastState)
     this.drawBullets(this.lastState)
   }
 
-  private drawBackground(state: TankGameState) {
+  private drawBackground() {
+    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 120, 120)
     this.graphics.fillStyle(0x090f1f, 1)
-    this.graphics.fillRect(0, 0, state.mapWidth, state.mapHeight)
+    this.graphics.fillRect(view.x, view.y, view.width, view.height)
     this.graphics.lineStyle(1, 0x17243d, .5)
-    for (let x = 0; x < state.mapWidth; x += 100) this.graphics.lineBetween(x, 0, x, state.mapHeight)
-    for (let y = 0; y < state.mapHeight; y += 100) this.graphics.lineBetween(0, y, state.mapWidth, y)
+    for (let x = Math.floor(view.x / 100) * 100; x <= view.right; x += 100) this.graphics.lineBetween(x, view.y, x, view.bottom)
+    for (let y = Math.floor(view.y / 100) * 100; y <= view.bottom; y += 100) this.graphics.lineBetween(view.x, y, view.right, y)
   }
 
   private drawWalls(state: TankGameState) {
+    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 80, 80)
     for (const wall of state.walls) {
+      if (!Phaser.Geom.Rectangle.Overlaps(view, new Phaser.Geom.Rectangle(wall.x, wall.y, wall.width, wall.height))) continue
       this.graphics.fillStyle(0x050811, .35)
       this.graphics.fillRoundedRect(wall.x + 5, wall.y + 7, wall.width, wall.height, 5)
       this.graphics.fillStyle(0x40516a, 1)
       this.graphics.fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 5)
+      this.graphics.fillStyle(0x536b86, .55)
+      this.graphics.fillRoundedRect(wall.x + 3, wall.y + 3, Math.max(1, wall.width - 6), Math.max(1, wall.height - 6), 4)
       this.graphics.lineStyle(2, 0x637894, .75)
       this.graphics.strokeRoundedRect(wall.x, wall.y, wall.width, wall.height, 5)
+      this.graphics.lineStyle(1, 0x9fb3c8, .28)
+      this.graphics.lineBetween(wall.x + 8, wall.y + 8, wall.x + wall.width - 8, wall.y + wall.height - 8)
     }
   }
 
   private drawTanks(state: TankGameState) {
+    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 100, 100)
     let colorIdx = 0
     for (const [id, tank] of Object.entries(state.tanks)) {
       const isMe = id === this.playerId
-      const color = isMe ? 0x2ecc71 : parseInt(TANK_COLORS[colorIdx % TANK_COLORS.length].slice(1), 16)
+      if (!view.contains(tank.x, tank.y) && tank.alive) continue
+      const color = tank.color && /^#[0-9a-fA-F]{6}$/.test(tank.color)
+        ? parseInt(tank.color.slice(1), 16)
+        : (isMe ? 0x2ecc71 : parseInt(TANK_COLORS[colorIdx % TANK_COLORS.length].slice(1), 16))
       colorIdx++
 
       if (!tank.alive) {
@@ -129,11 +141,27 @@ export class TankScene extends Phaser.Scene {
   }
 
   private drawBullets(state: TankGameState) {
+    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 60, 60)
     for (const bullet of state.bullets) {
+      if (!view.contains(bullet.x, bullet.y)) continue
       this.graphics.fillStyle(0xfbbf24, .2)
       this.graphics.fillCircle(bullet.x, bullet.y, 9)
       this.graphics.fillStyle(0xfff1a8, 1)
       this.graphics.fillCircle(bullet.x, bullet.y, 4)
+    }
+  }
+
+  private drawHealthPacks(state: TankGameState) {
+    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 60, 60)
+    for (const item of state.healthPacks ?? []) {
+      if (!view.contains(item.x, item.y)) continue
+      this.graphics.fillStyle(0x22c55e, .18)
+      this.graphics.fillCircle(item.x, item.y, item.radius * 1.8)
+      this.graphics.fillStyle(0x16a34a, 1)
+      this.graphics.fillCircle(item.x, item.y, item.radius)
+      this.graphics.fillStyle(0xffffff, 1)
+      this.graphics.fillRect(item.x - 3, item.y - 8, 6, 16)
+      this.graphics.fillRect(item.x - 8, item.y - 3, 16, 6)
     }
   }
 }

@@ -48,6 +48,7 @@ public class TankGameController {
             if (player.getUsername() != null && !player.getUsername().isBlank()) {
                 p.setUsername(player.getUsername());
             }
+            if (player.getColor() != null) p.setColor(player.getColor());
         } else {
             if (!room.canJoin()) {
                 sendError(player.getSessionId(), "Room not found or full");
@@ -65,7 +66,7 @@ public class TankGameController {
         roomService.saveRoom(room);
 
         TankGame game = activeGames.computeIfAbsent(roomId, k -> new TankGame(
-                roomId, 2400, 1600, 5, 15, 50
+                roomId, 3600, 2400, 5, 15, 50
         ));
         if (!game.getTanks().containsKey(player.getId())) {
             game.addPlayer(player);
@@ -90,6 +91,18 @@ public class TankGameController {
         if (game == null) return;
 
         game.handleInput(message.getPlayerId(), message.getPayload());
+    }
+
+    @MessageMapping("/tank/{roomId}/color")
+    public void playerColor(@DestinationVariable String roomId, GameMessage<ColorPayload> message) {
+        TankGame game = activeGames.get(roomId);
+        if (game != null && message.getPayload() != null) {
+            String color = message.getPayload().color();
+            game.setColor(message.getPlayerId(), color);
+            var room = roomService.getRoom(roomId);
+            if (room != null) room.getPlayers().stream().filter(p -> p.getId().equals(message.getPlayerId())).findFirst().ifPresent(p -> p.setColor(color));
+            broadcastGameState(roomId, game.getGameState());
+        }
     }
 
     @MessageMapping("/tank/{roomId}/ready")
@@ -138,11 +151,11 @@ public class TankGameController {
         // Always initialize fresh game
         TankGame previous = activeGames.get(roomId);
         if (previous != null) previous.setState(TankGame.GameState.FINISHED);
-        TankGame game = new TankGame(roomId, 2400, 1600, 5, 15, 50);
+        TankGame game = new TankGame(roomId, 3600, 2400, 5, 15, 50);
         for (Player p : room.getPlayers()) {
             game.addPlayer(p);
         }
-        addAutomaticBots(game, 6);
+        addAutomaticBots(game, 4);
         game.setState(TankGame.GameState.IN_PROGRESS);
         activeGames.put(roomId, game);
 
@@ -217,4 +230,6 @@ public class TankGameController {
             published.put(player.getId(), tank.getScore());
         });
     }
+
+    public record ColorPayload(String color) {}
 }

@@ -4,6 +4,7 @@ import Phaser from 'phaser'
 import { useRoute, useRouter } from 'vue-router'
 import { SnakeScene } from '@/game/snake/SnakeScene'
 import GlobalLeaderboard from '@/components/GlobalLeaderboard.vue'
+import GameMinimap from '@/components/GameMinimap.vue'
 import { useStompClient } from '@/composables/useStompClient'
 import { useGameSession } from '@/stores/gameSession'
 import { getRoom, leaveRoom } from '@/api/rooms'
@@ -21,6 +22,7 @@ const gameContainer = ref<HTMLDivElement | null>(null)
 const roomInfo = ref<GameRoom | null>(null)
 const gameState = ref<SnakeGameState | null>(null)
 const score = ref(0)
+const selectedColor = ref(localStorage.getItem('brim_snake_color') || '#38e88f')
 const alive = ref(true)
 const diedAt = ref(0)
 const clock = ref(Date.now())
@@ -101,6 +103,13 @@ function handleRespawn() {
   if (respawnRemaining.value > 0) return
   stomp.publish(`/app/snake/${roomId}/respawn`, {
     type: MessageType.ACTION, roomId, playerId: session.player.id, payload: null
+  })
+}
+
+function updateColor() {
+  localStorage.setItem('brim_snake_color', selectedColor.value)
+  stomp.publish(`/app/snake/${roomId}/color`, {
+    type: MessageType.ACTION, roomId, playerId: session.player.id, payload: { color: selectedColor.value }
   })
 }
 
@@ -196,6 +205,7 @@ onMounted(async () => {
       payload: {
         id: session.player.id,
         username: session.player.username,
+        color: selectedColor.value,
         sessionId: session.player.sessionId,
         score: 0,
         ready: true,
@@ -223,6 +233,8 @@ onMounted(async () => {
     }
     const onPointerMove = (e: PointerEvent) => pointSnake(e.clientX, e.clientY)
     const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return
+      e.preventDefault()
       boosting = true
       pointSnake(e.clientX, e.clientY)
       sendSteering(targetAngle, true, true)
@@ -285,6 +297,7 @@ onUnmounted(() => {
         <button class="btn-back" @click="toggleFullscreen">⛶ Toàn màn hình</button>
       </div>
       <div class="status-tags">
+        <label class="color-picker" title="Màu rắn"><span>🎨</span><input v-model="selectedColor" type="color" @change="updateColor" /></label>
         <span class="badge score-badge">🎯 Điểm: {{ score }}</span>
         <span class="badge player-badge">👤 {{ session.player.username }}</span>
       </div>
@@ -301,6 +314,7 @@ onUnmounted(() => {
       <div ref="gameContainer" class="game-canvas" />
 
       <GlobalLeaderboard game-type="SNAKE" class="global-rank-overlay" />
+      <GameMinimap :state="gameState" game-type="SNAKE" :player-id="myPlayerId" />
 
       <!-- Loading / Connecting overlay -->
       <div v-if="isConnecting" class="canvas-overlay">
@@ -341,7 +355,7 @@ onUnmounted(() => {
     </div>
 
     <div class="hint">
-      🐍 Di chuột/chạm để đổi hướng • Giữ chuột, chạm hoặc <strong>SPACE</strong> để tăng tốc
+      🐍 Di chuột/chạm để đổi hướng • Giữ chuột, chạm hoặc <strong>SPACE</strong> để tăng tốc • Mồi càng lớn, điểm càng cao • Camera tự zoom theo kích thước rắn
     </div>
 
     <!-- Leaderboard -->
@@ -357,7 +371,7 @@ onUnmounted(() => {
           <div class="player-label">
             <span class="avatar">{{ s.playerId.startsWith('bot-') ? '🤖' : '👤' }}</span>
             <span class="name">
-              {{ s.playerId.startsWith('bot-') ? 'Bot AI' : (s.playerId === session.player.id ? session.player.username + ' (Bạn)' : s.playerId.slice(0, 8)) }}
+              {{ s.playerId === session.player.id ? session.player.username + ' (Bạn)' : (s.username || (s.playerId.startsWith('bot-') ? 'Bot AI' : s.playerId.slice(0, 8))) }}
             </span>
           </div>
           <div class="player-stats">
@@ -380,6 +394,11 @@ onUnmounted(() => {
   align-items: center;
   margin: 0 auto;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100dvh;
+  height: 100dvh;
+  padding: .55rem clamp(.5rem, 2vw, 1.25rem);
+  gap: .4rem;
+  overflow: hidden;
 }
 
 .game-header {
@@ -390,7 +409,7 @@ onUnmounted(() => {
   padding: 0.5rem 0;
 }
 
-.header-actions { display: flex; gap: .5rem; }
+.header-actions { display: flex; gap: .35rem; }
 .canvas-wrapper:fullscreen { width: 100vw; height: 100vh; min-height: 100vh; border: 0; border-radius: 0; }
 
 .btn-back {
@@ -403,6 +422,9 @@ onUnmounted(() => {
   font-weight: 600;
   transition: all 0.2s;
 }
+
+.game-header { margin-bottom: 0; min-height: 42px; }
+.btn-back { padding: .35rem .7rem; font-size: .78rem; }
 
 .btn-back:hover {
   background: rgba(255, 255, 255, 0.15);
@@ -459,9 +481,10 @@ onUnmounted(() => {
 
 .canvas-wrapper {
   position: relative;
-  width: calc(100vw - 2rem);
-  height: calc(100vh - 150px);
-  min-height: 520px;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -590,6 +613,8 @@ onUnmounted(() => {
   color: #888;
   font-size: 0.85rem;
   text-align: center;
+  font-size: .72rem;
+  line-height: 1.25;
 }
 
 .leaderboard-card {
@@ -598,6 +623,9 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   padding: 1rem;
+  max-height: 132px;
+  overflow: auto;
+  flex-shrink: 0;
 }
 
 .leaderboard-card h3 {
@@ -634,7 +662,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 700px) {
-  .canvas-wrapper { min-height: 420px; height: calc(100vh - 125px); width: calc(100vw - .5rem); }
+  .canvas-wrapper { min-height: 0; height: auto; width: 100%; }
   .status-tags { gap: .35rem; }
   .badge { padding: .3rem .5rem; }
   .global-rank-overlay { transform: scale(.82); transform-origin: top right; }

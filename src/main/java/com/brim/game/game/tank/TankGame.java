@@ -17,10 +17,12 @@ public class TankGame {
 
     private final Map<String, Tank> tanks = new ConcurrentHashMap<>();
     private final List<Bullet> bullets = Collections.synchronizedList(new ArrayList<>());
+    private final List<HealthPack> healthPacks = Collections.synchronizedList(new ArrayList<>());
     private final List<Wall> walls = new ArrayList<>();
     private final Random random = new Random();
     private GameState state = GameState.WAITING;
     private long lastTick = 0;
+    private int botDecisionTick = 0;
 
     public TankGame(String roomId, int mapWidth, int mapHeight, double tankSpeed, double bulletSpeed, long tickRateMs) {
         this.roomId = roomId;
@@ -30,10 +32,12 @@ public class TankGame {
         this.bulletSpeed = bulletSpeed;
         this.tickRateMs = tickRateMs;
         generateWalls();
+        spawnHealthPacks();
     }
 
     public void addPlayer(Player player) {
         Tank tank = new Tank(player.getId(), generateSpawnPosition());
+        if (player.getColor() != null && player.getColor().matches("#[0-9a-fA-F]{6}")) tank.setColor(player.getColor());
         tanks.put(player.getId(), tank);
     }
 
@@ -48,6 +52,11 @@ public class TankGame {
         }
     }
 
+    public void setColor(String playerId, String color) {
+        Tank tank = tanks.get(playerId);
+        if (tank != null && color != null && color.matches("#[0-9a-fA-F]{6}")) tank.setColor(color);
+    }
+
     public GameState update() {
         long now = System.currentTimeMillis();
         if (now - lastTick < tickRateMs) return state;
@@ -55,11 +64,13 @@ public class TankGame {
 
         if (state != GameState.IN_PROGRESS) return state;
 
-        updateBots();
+        if (++botDecisionTick % 3 == 0) updateBots();
         respawnBotsIfReady();
         updateTanks();
         updateBullets();
         checkCollisions();
+        checkHealthPacks();
+        spawnHealthPacks();
         checkWinCondition();
 
         return state;
@@ -141,7 +152,8 @@ public class TankGame {
                 }
 
                 // 5. Bắn đạn khi đã ngắm chuẩn (độ lệch góc < 0.2 rad ~ 11 độ)
-                if (Math.abs(diff) < 0.25 && minDist < 500) {
+                // Bots fire less often and add a little aim variance, avoiding bullet spam.
+                if (Math.abs(diff) < 0.20 && minDist < 500 && random.nextInt(4) == 0) {
                     input.setShooting(true);
                 }
             }
@@ -242,12 +254,44 @@ public class TankGame {
         // Arena matches stay active; destroyed tanks can respawn after cooldown.
     }
 
+    private void checkHealthPacks() {
+        synchronized (healthPacks) {
+            Iterator<HealthPack> items = healthPacks.iterator();
+            while (items.hasNext()) {
+                HealthPack item = items.next();
+                boolean pickedUp = false;
+                for (Tank tank : tanks.values()) {
+                    if (!tank.isAlive() || tank.getHealth() >= 100) continue;
+                    double dx = tank.getX() - item.getX();
+                    double dy = tank.getY() - item.getY();
+                    if (dx * dx + dy * dy <= Math.pow(tank.getRadius() + item.getRadius(), 2)) {
+                        tank.setHealth(Math.min(100, tank.getHealth() + item.getHealAmount()));
+                        pickedUp = true;
+                        break;
+                    }
+                }
+                if (pickedUp) items.remove();
+            }
+        }
+    }
+
+    private void spawnHealthPacks() {
+        synchronized (healthPacks) {
+            while (healthPacks.size() < 12) {
+                int x = 40 + random.nextInt(Math.max(1, mapWidth - 80));
+                int y = 40 + random.nextInt(Math.max(1, mapHeight - 80));
+                if (canMove(x, y, 16)) healthPacks.add(new HealthPack(x, y, 12, 35));
+            }
+        }
+    }
+
     public boolean respawn(String playerId) {
         Tank tank = tanks.get(playerId);
         if (tank == null || tank.alive || System.currentTimeMillis() - tank.diedAt < 3000) return false;
-        int score = tank.score;
+        String color = tank.color;
         Tank fresh = new Tank(playerId, generateSpawnPosition());
-        fresh.score = score;
+        fresh.color = color;
+        // A respawn starts a fresh run on the map; score is intentionally reset.
         tanks.put(playerId, fresh);
         return true;
     }
@@ -321,6 +365,7 @@ public class TankGame {
         return new TankGameState(
                 new HashMap<>(tanks),
                 new ArrayList<>(bullets),
+                new ArrayList<>(healthPacks),
                 walls,
                 state,
                 mapWidth,
@@ -333,6 +378,7 @@ public class TankGame {
     @Data
     public static class Tank {
         private final String playerId;
+        private String color = "#2ecc71";
         private double x, y;
         private double angle = 0;
         private int health = 100;
@@ -351,7 +397,7 @@ public class TankGame {
         }
 
         public boolean canShoot() { return shootCooldown <= 0; }
-        public void resetShootCooldown() { shootCooldown = SHOOT_COOLDOWN_MAX; }
+        public void resetShootCooldown() { shootCooldown = playerId.startsWith("bot-") ? 18 : SHOOT_COOLDOWN_MAX; }
         public void updateCooldown() { if (shootCooldown > 0) shootCooldown--; }
         public void takeDamage(int damage) { health -= damage; if (health <= 0) alive = false; }
         public void increaseScore(int points) { this.score += points; }
@@ -368,6 +414,11 @@ public class TankGame {
         public Bullet(double x, double y, double angle, String ownerId) {
             this.x = x; this.y = y; this.angle = angle; this.ownerId = ownerId;
         }
+    }
+
+    @Data
+    public static class HealthPack {
+        private final int x, y, radius, healAmount;
     }
 
     @Data
@@ -401,6 +452,7 @@ public class TankGame {
     public static class TankGameState {
         private final Map<String, Tank> tanks;
         private final List<Bullet> bullets;
+        private final List<HealthPack> healthPacks;
         private final List<Wall> walls;
         private final GameState state;
         private final int mapWidth;

@@ -4,6 +4,7 @@ import Phaser from 'phaser'
 import { useRoute, useRouter } from 'vue-router'
 import { TankScene } from '@/game/tank/TankScene'
 import GlobalLeaderboard from '@/components/GlobalLeaderboard.vue'
+import GameMinimap from '@/components/GameMinimap.vue'
 import { useStompClient } from '@/composables/useStompClient'
 import { useGameSession } from '@/stores/gameSession'
 import { getRoom, leaveRoom } from '@/api/rooms'
@@ -22,6 +23,7 @@ const gameState = ref<TankGameState | null>(null)
 const roomInfo = ref<GameRoom | null>(null)
 const health = ref(100)
 const score = ref(0)
+const selectedColor = ref(localStorage.getItem('brim_tank_color') || '#2ecc71')
 const alive = ref(true)
 const diedAt = ref(0)
 const clock = ref(Date.now())
@@ -80,6 +82,13 @@ function handleRespawn() {
   if (respawnRemaining.value > 0) return
   stomp.publish(`/app/tank/${roomId}/respawn`, {
     type: MessageType.ACTION, roomId, playerId: session.player.id, payload: null
+  })
+}
+
+function updateColor() {
+  localStorage.setItem('brim_tank_color', selectedColor.value)
+  stomp.publish(`/app/tank/${roomId}/color`, {
+    type: MessageType.ACTION, roomId, playerId: session.player.id, payload: { color: selectedColor.value }
   })
 }
 
@@ -191,6 +200,7 @@ onMounted(async () => {
       payload: {
         id: session.player.id,
         username: session.player.username,
+        color: selectedColor.value,
         sessionId: session.player.sessionId,
         score: 0,
         ready: true,
@@ -260,6 +270,7 @@ onUnmounted(() => {
         <button class="secondary" @click="toggleFullscreen">⛶ Toàn màn hình</button>
       </div>
       <div class="game-info">
+        <label class="color-picker" title="Màu xe tăng"><span>🎨</span><input v-model="selectedColor" type="color" @change="updateColor" /></label>
         <span class="hp" :class="{ low: health <= 30 }">❤️ {{ health }} HP</span>
         <span class="score">⭐ {{ score }} điểm</span>
         <span v-if="!alive" class="dead">Đã hy sinh ☠️</span>
@@ -274,6 +285,7 @@ onUnmounted(() => {
       <div ref="gameContainer" class="game-canvas" />
 
       <GlobalLeaderboard game-type="TANK" class="global-rank-overlay" />
+      <GameMinimap :state="gameState" game-type="TANK" :player-id="myPlayerId" />
 
       <!-- Connecting overlay -->
       <div v-if="isConnecting" class="modal-overlay">
@@ -337,6 +349,11 @@ onUnmounted(() => {
   align-items: center;
   margin: 0 auto;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100dvh;
+  height: 100dvh;
+  padding: .55rem clamp(.5rem, 2vw, 1.25rem);
+  gap: .4rem;
+  overflow: hidden;
 }
 
 .game-header {
@@ -348,20 +365,22 @@ onUnmounted(() => {
   gap: 0.5rem;
 }
 
-.header-actions { display: flex; gap: .5rem; }
+.header-actions { display: flex; gap: .35rem; }
+.game-header { margin-bottom: 0; min-height: 42px; }
+.header-actions .secondary { padding: .35rem .7rem; font-size: .78rem; }
 .canvas-wrapper:fullscreen { width: 100vw; height: 100vh; min-height: 100vh; border: 0; border-radius: 0; }
 
 .game-info {
   display: flex;
-  gap: 1rem;
+  gap: .45rem;
   font-weight: 600;
   align-items: center;
 }
 
 .hp {
   color: var(--success);
-  font-size: 1rem;
-  padding: 0.4rem 0.8rem;
+  font-size: .82rem;
+  padding: 0.3rem 0.55rem;
   background: var(--bg-input);
   border-radius: 20px;
   border: 1px solid rgba(46, 204, 113, 0.4);
@@ -375,8 +394,8 @@ onUnmounted(() => {
 
 .score {
   color: var(--warning);
-  font-size: 1rem;
-  padding: 0.4rem 0.8rem;
+  font-size: .82rem;
+  padding: 0.3rem 0.55rem;
   background: var(--bg-input);
   border-radius: 20px;
   border: 1px solid rgba(243, 156, 18, 0.4);
@@ -391,13 +410,16 @@ onUnmounted(() => {
   color: var(--text-muted);
   font-size: 0.85rem;
   text-align: center;
+  font-size: .72rem;
+  line-height: 1.25;
 }
 
 .canvas-wrapper {
   position: relative;
-  width: calc(100vw - 2rem);
-  height: calc(100vh - 165px);
-  min-height: 520px;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
   border-radius: 16px;
   overflow: hidden;
   border: 2px solid rgba(255, 255, 255, 0.1);
@@ -415,7 +437,7 @@ onUnmounted(() => {
 .death-card button { width: 100%; background: linear-gradient(135deg, #f59e0b, #ef4444); }
 
 @media (max-width: 700px) {
-  .canvas-wrapper { width: calc(100vw - .5rem); height: calc(100vh - 145px); min-height: 420px; }
+  .canvas-wrapper { width: 100%; height: auto; min-height: 0; }
   .global-rank-overlay { transform: scale(.82); transform-origin: top right; }
 }
 
@@ -518,6 +540,9 @@ onUnmounted(() => {
   background: var(--bg-card);
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  max-height: 132px;
+  overflow: auto;
+  flex-shrink: 0;
 }
 
 .leaderboard h4 {

@@ -14,6 +14,7 @@ public class SnakeGame {
     private static final double BOOST_SPEED = 6.2;
     private static final double MAX_TURN_PER_TICK = 0.20;
     private static final double HEAD_RADIUS = 9.0;
+    private static final int BOOST_COST_PER_TICK = 1;
 
     private final String roomId;
     private final int gridWidth; // Kept in the wire format; values are world pixels.
@@ -25,6 +26,7 @@ public class SnakeGame {
     private final Random random = new Random();
     private GameState state = GameState.WAITING;
     private long lastTick = 0;
+    private int botDecisionTick = 0;
 
     public SnakeGame(String roomId, int gridWidth, int gridHeight, int initialLength, long tickRateMs) {
         this.roomId = roomId;
@@ -35,7 +37,9 @@ public class SnakeGame {
     }
 
     public void addPlayer(Player player) {
-        snakes.put(player.getId(), new Snake(player.getId(), generateSpawnPosition(), initialLength));
+        Snake snake = new Snake(player.getId(), player.getUsername(), generateSpawnPosition(), initialLength);
+        if (player.getColor() != null) snake.setColor(player.getColor());
+        snakes.put(player.getId(), snake);
     }
 
     public void removePlayer(String playerId) { snakes.remove(playerId); }
@@ -48,11 +52,18 @@ public class SnakeGame {
         }
     }
 
+    public void setColor(String playerId, String color) {
+        Snake snake = snakes.get(playerId);
+        if (snake != null && color != null && color.matches("#[0-9a-fA-F]{6}")) snake.setColor(color);
+    }
+
     public GameState update() {
         long now = System.currentTimeMillis();
         if (now - lastTick < tickRateMs || state != GameState.IN_PROGRESS) return state;
         lastTick = now;
-        updateBots();
+        // Bot steering does not need to run every physics tick. This cuts CPU and
+        // keeps the realtime loop available for human players.
+        if (++botDecisionTick % 3 == 0) updateBots();
         respawnBotsIfReady();
         snakes.values().forEach(this::moveSnake);
         checkCollisionsAndFood();
@@ -73,9 +84,13 @@ public class SnakeGame {
 
     private void moveSnake(Snake snake) {
         if (!snake.alive) return;
+        boolean canBoost = snake.boosting && snake.body.size() > 14 && snake.score >= BOOST_COST_PER_TICK;
+        snake.boosting = canBoost;
+        if (canBoost) snake.score -= BOOST_COST_PER_TICK;
         double difference = normalizeAngle(snake.targetAngle - snake.angle);
         snake.angle = normalizeAngle(snake.angle + Math.max(-MAX_TURN_PER_TICK, Math.min(MAX_TURN_PER_TICK, difference)));
-        double speed = snake.boosting && snake.body.size() > 14 ? BOOST_SPEED : NORMAL_SPEED;
+        double sizeSpeed = PhaserClamp(1.18 - snake.body.size() / 1400.0, .82, 1.18);
+        double speed = (snake.boosting && snake.body.size() > 14 ? BOOST_SPEED : NORMAL_SPEED) * sizeSpeed;
         Position head = snake.getHead();
         snake.body.add(0, new Position(head.x + Math.cos(snake.angle) * speed, head.y + Math.sin(snake.angle) * speed));
         while (snake.body.size() > snake.maxLength) snake.body.remove(snake.body.size() - 1);
@@ -127,7 +142,9 @@ public class SnakeGame {
     private void killSnake(Snake snake) {
         snake.alive = false;
         snake.diedAt = System.currentTimeMillis();
-        for (int i = 0; i < snake.body.size(); i += 3) {
+        // Drop a bounded number of pellets so a very long snake cannot flood the world.
+        int step = Math.max(3, snake.body.size() / 120);
+        for (int i = 0; i < snake.body.size(); i += step) {
             Position p = snake.body.get(i);
             double radius = 3 + random.nextDouble() * 4;
             food.add(new Food(p.x, p.y, radius, foodValue(radius)));
@@ -148,10 +165,17 @@ public class SnakeGame {
 
     private int foodValue(double radius) { return Math.max(1, (int) Math.round(radius * radius / 7.0)); }
 
+    private double PhaserClamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
     public boolean respawn(String playerId) {
         Snake snake = snakes.get(playerId);
         if (snake == null || snake.alive || System.currentTimeMillis() - snake.diedAt < 3000) return false;
-        snakes.put(playerId, new Snake(playerId, generateSpawnPosition(), initialLength));
+        String color = snake.color;
+        Snake fresh = new Snake(playerId, snake.username, generateSpawnPosition(), initialLength);
+        fresh.color = color;
+        snakes.put(playerId, fresh);
         return true;
     }
 
@@ -193,6 +217,8 @@ public class SnakeGame {
     @Data
     public static class Snake {
         private final String playerId;
+        private final String username;
+        private String color;
         private final List<Position> body = new ArrayList<>();
         private double angle;
         private double targetAngle;
@@ -202,8 +228,10 @@ public class SnakeGame {
         private int maxLength;
         private long diedAt;
 
-        public Snake(String playerId, Position head, int initialLength) {
+        public Snake(String playerId, String username, Position head, int initialLength) {
             this.playerId = playerId;
+            this.username = username == null || username.isBlank() ? playerId : username;
+            this.color = "#38e88f";
             this.angle = Math.random() * Math.PI * 2 - Math.PI;
             this.targetAngle = angle;
             this.maxLength = Math.max(18, initialLength * 6);

@@ -24,7 +24,7 @@ onUnmounted(() => unsubscribe?.())
 
 <template>
   <aside class="global-leaderboard">
-    <div class="rank-title"><span>🏆 XẾP HẠNG</span><i>LIVE</i></div>
+    <div class="rank-title"><span>🏆 HÔM NAY</span><i>LIVE</i></div>
     <div v-if="entries.length" class="rank-list">
       <div v-for="(entry, index) in entries.slice(0, 5)" :key="entry.playerId" class="rank-item">
         <b>{{ index + 1 }}</b><span>{{ entry.username }}</span><strong>{{ entry.score }}</strong>

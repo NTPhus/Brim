@@ -13,6 +13,8 @@ export interface SnakeFood extends SnakePosition {
 
 export interface SnakeSnake {
   playerId: string
+  username?: string
+  color?: string
   body: SnakePosition[]
   angle: number
   targetAngle: number
@@ -36,6 +38,7 @@ export interface SnakeGameState {
  */
 export interface TankTank {
   playerId: string
+  color?: string
   x: number
   y: number
   angle: number
@@ -56,6 +59,13 @@ export interface TankBullet {
   damage: number
 }
 
+export interface TankHealthPack {
+  x: number
+  y: number
+  radius: number
+  healAmount: number
+}
+
 export interface TankWall {
   x: number
   y: number
@@ -74,6 +84,7 @@ export interface TankInput {
 export interface TankGameState {
   tanks: Record<string, TankTank>
   bullets: TankBullet[]
+  healthPacks: TankHealthPack[]
   walls: TankWall[]
   state: 'WAITING' | 'IN_PROGRESS' | 'FINISHED'
   mapWidth: number
@@ -104,6 +115,7 @@ export interface ChessGameState {
   winner?: string | null
   check?: boolean
   legalMoves: ChessMove[]
+  lastMove?: ChessMove | null
 }
 
 export interface ChessMove {
@@ -137,6 +149,7 @@ export interface XiangqiGameState {
   winner?: string | null
   check?: boolean
   legalMoves: XiangqiMove[]
+  lastMove?: XiangqiMove | null
 }
 
 export interface XiangqiMove {

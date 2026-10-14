@@ -50,6 +50,7 @@ export interface Player {
   score: number
   ready: boolean
   state: PlayerState
+  color?: string
 }
 
 export interface GameRoom {
