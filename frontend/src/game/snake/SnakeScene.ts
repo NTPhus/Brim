@@ -49,7 +49,8 @@ export class SnakeScene extends Phaser.Scene {
       }
       while (rendered.length < snake.body.length) rendered.push({ ...snake.body[rendered.length] })
       while (rendered.length > snake.body.length) rendered.pop()
-      for (let i = 0; i < rendered.length; i++) {
+      const interpolationStride = rendered.length > 500 ? 2 : 1
+      for (let i = 0; i < rendered.length; i += interpolationStride) {
         rendered[i].x = Phaser.Math.Linear(rendered[i].x, snake.body[i].x, 0.32)
         rendered[i].y = Phaser.Math.Linear(rendered[i].y, snake.body[i].y, 0.32)
       }

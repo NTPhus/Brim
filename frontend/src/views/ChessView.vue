@@ -57,6 +57,14 @@ const isCheck = computed(() => {
   return gameState.value.check ?? false
 })
 const lastMove = computed(() => gameState.value?.lastMove ?? null)
+const historyRows = computed(() => {
+  const moves = gameState.value?.moveHistory ?? []
+  return Array.from({ length: Math.ceil(moves.length / 2) }, (_, index) => ({
+    number: index + 1,
+    white: formatMove(moves[index * 2]),
+    black: formatMove(moves[index * 2 + 1])
+  }))
+})
 
 const legalTargets = computed(() => {
   if (!selectedCell.value) return new Set<string>()
@@ -82,6 +90,14 @@ function pieceKey(piece: ChessPiece): string {
 
 // Keep White at the bottom of the board, as on a physical chessboard.
 function boardY(row: number): number { return 8 - row }
+
+function formatMove(raw?: string): string {
+  if (!raw) return '—'
+  const match = raw.match(/fromX=(\d+), fromY=(\d+), toX=(\d+), toY=(\d+)/)
+  if (!match) return raw.replace(/^ChessMove\[|\]$/g, '')
+  const [, fx, fy, tx, ty] = match.map(Number)
+  return `${String.fromCharCode(97 + fx)}${8 - fy} → ${String.fromCharCode(97 + tx)}${8 - ty}`
+}
 
 function onCellClick(x: number, y: number) {
   error.value = null
@@ -288,8 +304,11 @@ async function handleGoToLobby() {
 
         <aside class="history" v-if="gameState?.moveHistory?.length">
           <h4>Lịch sử nước đi</h4>
+          <div class="history-columns"><span>#</span><span>Trắng</span><span>Đen</span></div>
           <div class="move-list">
-            <span v-for="(move, i) in gameState.moveHistory" :key="i" class="move-item">{{ i + 1 }}. {{ move }}</span>
+            <div v-for="row in historyRows" :key="row.number" class="move-row">
+              <b>{{ row.number }}</b><span>{{ row.white }}</span><span>{{ row.black }}</span>
+            </div>
           </div>
         </aside>
 
@@ -564,13 +583,19 @@ async function handleGoToLobby() {
   color: var(--text-secondary);
 }
 
+.history-columns { display: grid; grid-template-columns: 24px 1fr 1fr; gap: .35rem; padding: 0 .35rem .25rem; color: var(--text-muted); font-size: .65rem; text-transform: uppercase; letter-spacing: .04em; }
+
 .move-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  max-height: 100px;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 360px;
   overflow-y: auto;
 }
+
+.move-row { display: grid; grid-template-columns: 24px 1fr 1fr; gap: .35rem; align-items: center; padding: .32rem .35rem; border-radius: 6px; background: rgba(255,255,255,.045); font-size: .76rem; }
+.move-row b { color: #fbbf24; }
+.move-row span { color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
 
 .move-item {
   background: rgba(255, 255, 255, 0.05);

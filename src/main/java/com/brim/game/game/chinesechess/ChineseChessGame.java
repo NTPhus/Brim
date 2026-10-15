@@ -1,6 +1,7 @@
 package com.brim.game.game.chinesechess;
 
 import com.brim.game.service.TurnBasedGameService;
+import com.brim.game.game.ai.AlphaBetaSearch;
 import lombok.Data;
 
 import java.util.*;
@@ -26,8 +27,8 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
     }
 
     @Override
-    public boolean makeMove(String playerId, Object move) {
-        if (!playerId.equals(currentPlayer)) return false;
+    public synchronized boolean makeMove(String playerId, Object move) {
+        if (isGameOver() || !Objects.equals(playerId, currentPlayer)) return false;
         if (!(move instanceof ChineseChessMove chessMove)) return false;
 
         PieceColor color = currentPlayer.equals(player1) ? PieceColor.RED : PieceColor.BLACK;
@@ -46,13 +47,10 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
     }
 
     @Override
-    public Object getState() {
+    public synchronized Object getState() {
         PieceColor currentColor = Objects.equals(currentPlayer, player1) ? PieceColor.RED : PieceColor.BLACK;
-        List<ChineseChessMove> legalMoves = board.getPieces().values().stream()
-                .filter(piece -> piece.getColor() == currentColor)
-                .flatMap(piece -> generateXiangqiMoves(piece, currentColor).stream())
-                .toList();
-        return new ChineseChessGameState(board.getPieces(), currentPlayer, status, moveHistory, player1, player2, winner, legalMoves, lastMove);
+        List<ChineseChessMove> legalMoves = isGameOver() ? List.of() : legalMoves(currentColor);
+        return new ChineseChessGameState(board.snapshot(), currentPlayer, status, new ArrayList<>(moveHistory), player1, player2, winner, legalMoves, lastMove, inCheck(currentColor));
     }
 
     @Override
@@ -87,68 +85,91 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
 
     @Override
     public Object generateBotMove() {
-        PieceColor botColor = currentPlayer.equals(player1) ? PieceColor.RED : PieceColor.BLACK;
-        List<ChineseChessPiece> myPieces = board.getPieces().values().stream()
-                .filter(p -> p.getColor() == botColor)
-                .toList();
-        if (myPieces.isEmpty()) return null;
+        ChineseChessGame analysis;
+        PieceColor color;
+        synchronized (this) {
+            if (isGameOver() || currentPlayer == null) return null;
+            color = currentPlayer.equals(player1) ? PieceColor.RED : PieceColor.BLACK;
+            analysis = new ChineseChessGame(roomId, difficulty);
+            analysis.board.restore(board.snapshot());
+        }
+        return new AlphaBetaSearch<>(analysis.new SearchPosition(color)).findBestMove(difficulty);
+    }
 
-        record ScoredMove(ChineseChessMove move, int score) {}
-        List<ScoredMove> legalMoves = new ArrayList<>();
+    private PieceColor opposite(PieceColor color) {
+        return color == PieceColor.RED ? PieceColor.BLACK : PieceColor.RED;
+    }
 
-        for (ChineseChessPiece p : myPieces) {
-            List<ChineseChessMove> moves = generateXiangqiMoves(p, botColor);
-            for (ChineseChessMove m : moves) {
-                int score = evaluateXiangqiMove(m, p, botColor);
-                legalMoves.add(new ScoredMove(m, score));
+    private List<ChineseChessMove> legalMoves(PieceColor color) {
+        List<ChineseChessMove> moves = new ArrayList<>();
+        for (ChineseChessPiece piece : board.getPieces().values()) {
+            if (piece.color == color) moves.addAll(generateXiangqiMoves(piece, color));
+        }
+        return moves;
+    }
+
+    private List<ChineseChessMove> generateXiangqiMoves(ChineseChessPiece piece, PieceColor color) {
+        List<ChineseChessMove> moves = generatePseudoMoves(piece, color);
+        moves.removeIf(move -> {
+            ChineseChessPiece target = board.getPieces().get(move.toX + "," + move.toY);
+            if (target != null && target.type == PieceType.GENERAL) return true;
+            var snapshot = board.snapshot();
+            try {
+                board.executeMove(move);
+                return inCheck(color);
+            } finally { board.restore(snapshot); }
+        });
+        return moves;
+    }
+
+    private boolean inCheck(PieceColor color) {
+        ChineseChessPiece king = board.getPieces().values().stream()
+                .filter(p -> p.color == color && p.type == PieceType.GENERAL).findFirst().orElse(null);
+        if (king == null) return true;
+        for (ChineseChessPiece enemy : board.getPieces().values()) {
+            if (enemy.color == color) continue;
+            // Flying generals may not face each other on an open file.
+            if (enemy.type == PieceType.GENERAL && enemy.x == king.x) {
+                boolean blocked = false;
+                for (int y = Math.min(enemy.y, king.y) + 1; y < Math.max(enemy.y, king.y); y++) {
+                    if (board.getPieces().containsKey(king.x + "," + y)) { blocked = true; break; }
+                }
+                if (!blocked) return true;
             }
+            if (generatePseudoMoves(enemy, enemy.color).stream().anyMatch(m -> m.toX == king.x && m.toY == king.y)) return true;
         }
-
-        if (legalMoves.isEmpty()) return null;
-
-        if ("EASY".equals(difficulty)) {
-            return legalMoves.get(new Random().nextInt(legalMoves.size())).move();
-        }
-
-        // Sort descending by heuristic score
-        legalMoves.sort((a, b) -> Integer.compare(b.score, a.score));
-
-        if ("HARD".equals(difficulty)) {
-            return legalMoves.stream()
-                    .max(Comparator.comparingInt(scored -> hardMoveScore(scored.move(), botColor)))
-                    .orElseThrow().move();
-        }
-
-        // Randomize among top scoring moves
-        Random rand = new Random();
-        int bestScore = legalMoves.get(0).score;
-        List<ChineseChessMove> topMoves = legalMoves.stream()
-                .filter(sm -> sm.score >= bestScore - 6)
-                .map(ScoredMove::move)
-                .toList();
-
-        return topMoves.get(rand.nextInt(topMoves.size()));
+        return false;
     }
 
-    private int hardMoveScore(ChineseChessMove move, PieceColor color) {
-        Map<String, ChineseChessPiece> snapshot = board.snapshot();
-        board.executeMove(move);
-        int material = board.getPieces().values().stream()
-                .mapToInt(piece -> (piece.color == color ? 1 : -1) * getPieceValue(piece.type))
-                .sum();
-        PieceColor opponent = color == PieceColor.RED ? PieceColor.BLACK : PieceColor.RED;
-        int opponentBestCapture = board.getPieces().values().stream()
-                .filter(piece -> piece.color == opponent)
-                .flatMap(piece -> generateXiangqiMoves(piece, opponent).stream())
-                .mapToInt(reply -> {
-                    ChineseChessPiece target = board.getPieces().get(reply.toX + "," + reply.toY);
-                    return target == null ? 0 : getPieceValue(target.type);
-                }).max().orElse(0);
-        board.restore(snapshot);
-        return material * 10 - opponentBestCapture * 9;
+    private final class SearchPosition implements AlphaBetaSearch.Position<ChineseChessMove> {
+        private PieceColor side;
+        private final Deque<Map<String, ChineseChessPiece>> history = new ArrayDeque<>();
+        SearchPosition(PieceColor color) { side = color; }
+        public List<ChineseChessMove> legalMoves() { return ChineseChessGame.this.legalMoves(side); }
+        public void play(ChineseChessMove move) { history.push(board.snapshot()); board.executeMove(move); side = opposite(side); }
+        public void undo() { board.restore(history.pop()); side = opposite(side); }
+        public boolean inCheck() { return ChineseChessGame.this.inCheck(side); }
+        public boolean stalemateIsLoss() { return true; }
+        public boolean tactical(ChineseChessMove move) { return board.getPieces().containsKey(move.toX + "," + move.toY); }
+        public int movePriority(ChineseChessMove move) {
+            ChineseChessPiece mover = board.getPieces().get(move.fromX + "," + move.fromY);
+            ChineseChessPiece target = board.getPieces().get(move.toX + "," + move.toY);
+            return (target == null ? 0 : 1000 + getPieceValue(target.type) * 10 - getPieceValue(mover.type))
+                    + evaluateXiangqiMove(move, mover, side);
+        }
+        public int evaluate() { return evaluatePosition(side); }
+        public String key() {
+            StringBuilder key = new StringBuilder(side.name());
+            board.getPieces().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+                ChineseChessPiece p = entry.getValue();
+                key.append('|').append(entry.getKey()).append(':').append(p.color).append(':').append(p.type);
+            });
+
+            return key.toString();
+        }
     }
 
-    private List<ChineseChessMove> generateXiangqiMoves(ChineseChessPiece p, PieceColor color) {
+    private List<ChineseChessMove> generatePseudoMoves(ChineseChessPiece p, PieceColor color) {
         List<ChineseChessMove> moves = new ArrayList<>();
         int x = p.getX(), y = p.getY();
         Map<String, ChineseChessPiece> pieces = board.getPieces();
@@ -286,6 +307,26 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
         return moves;
     }
 
+    private int evaluatePosition(PieceColor side) {
+        int score = 0;
+        for (ChineseChessPiece p : board.getPieces().values()) {
+            int value = getPieceValue(p.type) * 10;
+            int progress = p.color == PieceColor.RED ? 9 - p.y : p.y;
+            int center = 4 - Math.abs(p.x - 4);
+            value += switch (p.type) {
+                case SOLDIER -> progress * 5 + (progress >= 5 ? 55 + center * 4 : 0);
+                case HORSE -> center * 7 + Math.min(progress, 6) * 3;
+                case CANNON -> center * 4;
+                case CHARIOT -> center * 2;
+                case ADVISOR, ELEPHANT -> 8;
+                case GENERAL -> 0;
+            };
+            if (p.type == PieceType.CHARIOT || p.type == PieceType.HORSE || p.type == PieceType.CANNON) value += generatePseudoMoves(p, p.color).size() * 3;
+            score += p.color == side ? value : -value;
+        }
+        return score;
+    }
+
     private int evaluateXiangqiMove(ChineseChessMove move, ChineseChessPiece mover, PieceColor color) {
         int score = 0;
         ChineseChessPiece target = board.getPieces().get(move.getToX() + "," + move.getToY());
@@ -339,12 +380,11 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
     }
 
     private void checkGameEnd() {
-        if (board.isGeneralCaptured(PieceColor.RED)) {
+        PieceColor side = currentPlayer.equals(player1) ? PieceColor.RED : PieceColor.BLACK;
+        if (legalMoves(side).isEmpty()) {
+            // In Xiangqi, stalemate is a loss for the side unable to move.
             status = GameStatus.FINISHED;
-            winner = player2;
-        } else if (board.isGeneralCaptured(PieceColor.BLACK)) {
-            status = GameStatus.FINISHED;
-            winner = player1;
+            winner = side == PieceColor.RED ? player2 : player1;
         }
     }
 
@@ -476,8 +516,9 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
         private final String winner;
         private final List<ChineseChessMove> legalMoves;
         private final ChineseChessMove lastMove;
+        private final boolean check;
 
-        public ChineseChessGameState(Map<String, ChineseChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String redPlayer, String blackPlayer, String winner, List<ChineseChessMove> legalMoves, ChineseChessMove lastMove) {
+        public ChineseChessGameState(Map<String, ChineseChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String redPlayer, String blackPlayer, String winner, List<ChineseChessMove> legalMoves, ChineseChessMove lastMove, boolean check) {
             this.pieces = pieces;
             this.currentPlayer = currentPlayer;
             this.status = status;
@@ -487,6 +528,7 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
             this.winner = winner;
             this.legalMoves = legalMoves;
             this.lastMove = lastMove;
+            this.check = check;
         }
     }
 }

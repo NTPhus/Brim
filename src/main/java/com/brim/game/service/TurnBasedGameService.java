@@ -128,9 +128,10 @@ public class TurnBasedGameService {
             java.util.concurrent.CompletableFuture.delayedExecutor(800, java.util.concurrent.TimeUnit.MILLISECONDS).execute(() -> {
                 try {
                     TurnBasedGame g = activeGames.get(roomId);
-                    if (g != null && current.equals(g.getCurrentPlayerId()) && !g.isGameOver()) {
+                    if (g == game && current.equals(g.getCurrentPlayerId()) && !g.isGameOver()) {
                         Object botMove = g.generateBotMove();
-                        if (botMove != null) {
+                        if (botMove != null && activeGames.get(roomId) == g
+                                && current.equals(g.getCurrentPlayerId()) && !g.isGameOver()) {
                             processMove(roomId, current, botMove);
                         }
                     }

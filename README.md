@@ -8,6 +8,26 @@ Multi-game platform with Spring Boot, Kafka, WebSocket supporting real-time and 
 - **Chess** (Turn-based, Kafka)
 - **Chinese Chess** (Turn-based, Kafka)
 
+## Chess and Chinese Chess bots
+
+Both games use the built-in Java engine in `game/ai/AlphaBetaSearch.java`; no external engine or network calls are required for move selection. Select **Easy**, **Medium**, or **Hard** when creating a room, then add a bot.
+
+| Difficulty | Maximum search depth (plies) | Search time budget per move |
+|------------|-----------------------------|-----------------------------|
+| Easy | 1 | 100 ms |
+| Medium | 3 | 450 ms |
+| Hard | 6 | 1,500 ms |
+
+A ply is one move by one side. The engine searches increasingly deep iterations and returns the best move from the last completed iteration. Actual depth depends on the position and CPU speed. The time budget excludes the existing 800 ms bot-turn delay and can overrun by the cost of one move-generation/evaluation operation.
+
+Search uses negamax with alpha–beta pruning, capture ordering, a bounded per-search transposition table, and up to six additional plies of quiescence search for captures, promotions, and check evasions. Evaluation includes material, development, centralization, mobility, pawn progress, and a king pawn shield in chess. Xiangqi additionally rewards soldiers crossing the river. Search runs on a detached board copy.
+
+Both players and bots must avoid self-check. Chess supports checkmate, stalemate, castling, en passant, and promotion; an omitted promotion defaults to queen, while the move API also accepts `ROOK`, `BISHOP`, and `KNIGHT`. Xiangqi enforces the flying-general restriction and treats having no legal moves as a loss. State messages include `check` and legal moves.
+
+This is a custom engine, not a Stockfish integration. Opening books, endgame tablebases, chess repetition/fifty-move/insufficient-material draws, and Xiangqi repetition/perpetual-check adjudication are not implemented.
+
+Run backend regression tests with `mvn test`. Tests cover tactical traps, immediate wins, legal moves, special moves, state isolation, search depth, quiescence, and interruption/timeout cleanup.
+
 ## Architecture
 
 ```

@@ -1,6 +1,7 @@
 package com.brim.game.game.chess;
 
 import com.brim.game.service.TurnBasedGameService;
+import com.brim.game.game.ai.AlphaBetaSearch;
 import lombok.Data;
 
 import java.util.*;
@@ -26,8 +27,8 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
     }
 
     @Override
-    public boolean makeMove(String playerId, Object move) {
-        if (!playerId.equals(currentPlayer)) return false;
+    public synchronized boolean makeMove(String playerId, Object move) {
+        if (isGameOver() || !Objects.equals(playerId, currentPlayer)) return false;
         if (!(move instanceof ChessMove chessMove)) return false;
 
         PieceColor color = currentPlayer.equals(player1) ? PieceColor.WHITE : PieceColor.BLACK;
@@ -46,13 +47,10 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
     }
 
     @Override
-    public Object getState() {
+    public synchronized Object getState() {
         PieceColor currentColor = Objects.equals(currentPlayer, player1) ? PieceColor.WHITE : PieceColor.BLACK;
-        List<ChessMove> legalMoves = board.getPieces().values().stream()
-                .filter(piece -> piece.getColor() == currentColor)
-                .flatMap(piece -> generateLegalMovesForPiece(piece, currentColor).stream())
-                .toList();
-        return new ChessGameState(board.getPieces(), currentPlayer, status, moveHistory, player1, player2, winner, legalMoves, lastMove);
+        List<ChessMove> legalMoves = isGameOver() ? List.of() : legalMoves(currentColor);
+        return new ChessGameState(board.snapshot(), currentPlayer, status, new ArrayList<>(moveHistory), player1, player2, winner, legalMoves, lastMove, inCheck(currentColor));
     }
 
     @Override
@@ -88,68 +86,109 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
 
     @Override
     public Object generateBotMove() {
-        PieceColor botColor = currentPlayer.equals(player1) ? PieceColor.WHITE : PieceColor.BLACK;
-        List<ChessPiece> myPieces = board.getPieces().values().stream()
-                .filter(p -> p.getColor() == botColor)
-                .toList();
-        if (myPieces.isEmpty()) return null;
+        ChessGame analysis;
+        PieceColor color;
+        synchronized (this) {
+            if (isGameOver() || currentPlayer == null) return null;
+            color = currentPlayer.equals(player1) ? PieceColor.WHITE : PieceColor.BLACK;
+            analysis = new ChessGame(roomId, difficulty);
+            analysis.board.load(board.save());
+        }
+        return new AlphaBetaSearch<>(analysis.new SearchPosition(color)).findBestMove(difficulty);
+    }
 
-        record ScoredMove(ChessMove move, int score) {}
-        List<ScoredMove> legalMoves = new ArrayList<>();
+    private PieceColor opposite(PieceColor color) {
+        return color == PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
+    }
 
-        for (ChessPiece p : myPieces) {
-            List<ChessMove> movesForPiece = generateLegalMovesForPiece(p, botColor);
-            for (ChessMove m : movesForPiece) {
-                int score = evaluateMove(m, p, botColor);
-                legalMoves.add(new ScoredMove(m, score));
+    private List<ChessMove> legalMoves(PieceColor color) {
+        List<ChessMove> moves = new ArrayList<>();
+        for (ChessPiece piece : board.getPieces().values()) {
+            if (piece.color == color) moves.addAll(generateLegalMovesForPiece(piece, color));
+        }
+        return moves;
+    }
+
+    private List<ChessMove> generateLegalMovesForPiece(ChessPiece piece, PieceColor color) {
+        int originalX = piece.x, originalY = piece.y;
+        List<ChessMove> moves = generatePseudoMoves(piece, color);
+        if (piece.type == PieceType.KING && !piece.hasMoved && piece.x == 4
+                && piece.y == (color == PieceColor.WHITE ? 0 : 7) && !inCheck(color)) {
+            for (int rookX : new int[]{0, 7}) {
+                ChessPiece rook = board.getPieces().get(rookX + "," + piece.y);
+                if (rook == null || rook.type != PieceType.ROOK || rook.color != color || rook.hasMoved) continue;
+                int direction = rookX == 0 ? -1 : 1;
+                boolean clear = true;
+                for (int x = originalX + direction; x != rookX; x += direction) {
+                    if (board.getPieces().containsKey(x + "," + piece.y)) { clear = false; break; }
+                }
+                if (!clear) continue;
+                var snapshot = board.save();
+                boolean safe;
+                try {
+                    board.executeMove(new ChessMove(originalX, originalY, originalX + direction, originalY));
+                    safe = !inCheck(color);
+                } finally { board.load(snapshot); }
+                if (safe) moves.add(new ChessMove(4, rook.y, 4 + direction * 2, rook.y));
             }
         }
-
-        if (legalMoves.isEmpty()) return null;
-
-        if ("EASY".equals(difficulty)) {
-            return legalMoves.get(new Random().nextInt(legalMoves.size())).move();
-        }
-
-        // Sort by score descending (best move first)
-        legalMoves.sort((a, b) -> Integer.compare(b.score, a.score));
-
-        if ("HARD".equals(difficulty)) {
-            return legalMoves.stream()
-                    .max(Comparator.comparingInt(scored -> hardMoveScore(scored.move(), botColor)))
-                    .orElseThrow().move();
-        }
-
-        // Medium: choose among near-best moves for some variety.
-        Random rand = new Random();
-        int bestScore = legalMoves.get(0).score;
-        List<ChessMove> topMoves = legalMoves.stream()
-                .filter(sm -> sm.score >= bestScore - 5)
-                .map(ScoredMove::move)
-                .toList();
-
-        return topMoves.get(rand.nextInt(topMoves.size()));
+        moves.removeIf(move -> {
+            ChessPiece target = board.getPieces().get(move.toX + "," + move.toY);
+            if (target != null && target.type == PieceType.KING) return true;
+            var snapshot = board.save();
+            try {
+                board.executeMove(move);
+                return inCheck(color);
+            } finally { board.load(snapshot); }
+        });
+        return moves;
     }
 
-    private int hardMoveScore(ChessMove move, PieceColor color) {
-        Map<String, ChessPiece> snapshot = board.snapshot();
-        board.executeMove(move);
-        int material = board.getPieces().values().stream()
-                .mapToInt(piece -> (piece.color == color ? 1 : -1) * getPieceValue(piece.type))
-                .sum();
-        PieceColor opponent = color == PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE;
-        int opponentBestCapture = board.getPieces().values().stream()
-                .filter(piece -> piece.color == opponent)
-                .flatMap(piece -> generateLegalMovesForPiece(piece, opponent).stream())
-                .mapToInt(reply -> {
-                    ChessPiece target = board.getPieces().get(reply.toX + "," + reply.toY);
-                    return target == null ? 0 : getPieceValue(target.type);
-                }).max().orElse(0);
-        board.restore(snapshot);
-        return material * 10 - opponentBestCapture * 9;
+    private boolean inCheck(PieceColor color) {
+        ChessPiece king = board.getPieces().values().stream()
+                .filter(p -> p.color == color && p.type == PieceType.KING).findFirst().orElse(null);
+        if (king == null) return true;
+        for (ChessPiece enemy : board.getPieces().values()) {
+            if (enemy.color == color) continue;
+            // Pawn attacks differ from their forward movement.
+            if (enemy.type == PieceType.PAWN) {
+                if (Math.abs(enemy.x - king.x) == 1 && king.y - enemy.y == (enemy.color == PieceColor.WHITE ? 1 : -1)) return true;
+                continue;
+            }
+            if (generatePseudoMoves(enemy, enemy.color).stream().anyMatch(m -> m.toX == king.x && m.toY == king.y)) return true;
+        }
+        return false;
     }
 
-    private List<ChessMove> generateLegalMovesForPiece(ChessPiece p, PieceColor color) {
+    private final class SearchPosition implements AlphaBetaSearch.Position<ChessMove> {
+        private PieceColor side;
+        private final Deque<ChessBoard.BoardSnapshot> history = new ArrayDeque<>();
+        SearchPosition(PieceColor color) { side = color; }
+        public List<ChessMove> legalMoves() { return ChessGame.this.legalMoves(side); }
+        public void play(ChessMove move) { history.push(board.save()); board.executeMove(move); side = opposite(side); }
+        public void undo() { board.load(history.pop()); side = opposite(side); }
+        public boolean inCheck() { return ChessGame.this.inCheck(side); }
+        public boolean stalemateIsLoss() { return false; }
+        public boolean tactical(ChessMove move) { return board.getPieces().containsKey(move.toX + "," + move.toY) || move.promotion != null || isEnPassant(move); }
+        public int movePriority(ChessMove move) {
+            ChessPiece mover = board.getPieces().get(move.fromX + "," + move.fromY);
+            ChessPiece target = board.getPieces().get(move.toX + "," + move.toY);
+            return (target == null ? 0 : 1000 + getPieceValue(target.type) * 10 - getPieceValue(mover.type))
+                    + evaluateMove(move, mover, side) + (move.promotion == null ? 0 : getPieceValue(move.promotion) * 10);
+        }
+        public int evaluate() { return evaluatePosition(side); }
+        public String key() {
+            StringBuilder key = new StringBuilder(side.name());
+            board.getPieces().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
+                ChessPiece p = entry.getValue();
+                key.append('|').append(entry.getKey()).append(':').append(p.color).append(':').append(p.type).append(p.hasMoved);
+            });
+            key.append("/ep:").append(board.enPassant);
+            return key.toString();
+        }
+    }
+
+    private List<ChessMove> generatePseudoMoves(ChessPiece p, PieceColor color) {
         List<ChessMove> moves = new ArrayList<>();
         int x = p.getX(), y = p.getY();
         Map<String, ChessPiece> pieces = board.getPieces();
@@ -206,7 +245,35 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
                 }
             }
         }
+        if (p.type == PieceType.PAWN) {
+            int direction = color == PieceColor.WHITE ? 1 : -1;
+            for (int dx : new int[]{-1, 1}) {
+                ChessMove capture = new ChessMove(x, y, x + dx, y + direction);
+                if (isEnPassant(capture)) moves.add(capture);
+            }
+            List<ChessMove> promotions = new ArrayList<>();
+            for (ChessMove move : moves) {
+                if (move.toY == 0 || move.toY == 7) {
+                    for (PieceType type : new PieceType[]{PieceType.QUEEN, PieceType.ROOK, PieceType.BISHOP, PieceType.KNIGHT}) {
+                        ChessMove promotion = new ChessMove(move.fromX, move.fromY, move.toX, move.toY);
+                        promotion.promotion = type;
+                        promotions.add(promotion);
+                    }
+                } else promotions.add(move);
+            }
+            return promotions;
+        }
         return moves;
+    }
+
+    private boolean isEnPassant(ChessMove move) {
+        ChessPiece pawn = board.getPieces().get(move.fromX + "," + move.fromY);
+        ChessPiece victim = board.getPieces().get(move.toX + "," + move.fromY);
+        return pawn != null && pawn.type == PieceType.PAWN && victim != null
+                && victim.type == PieceType.PAWN && victim.color != pawn.color
+                && Math.abs(move.toX - move.fromX) == 1
+                && move.toY - move.fromY == (pawn.color == PieceColor.WHITE ? 1 : -1)
+                && (move.toX + "," + move.toY).equals(board.enPassant);
     }
 
     private void addSlidingMoves(List<ChessMove> moves, ChessPiece p, PieceColor color, int[][] dirs) {
@@ -228,6 +295,33 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
                 ny += d[1];
             }
         }
+    }
+
+    private int evaluatePosition(PieceColor side) {
+        int score = 0;
+        for (ChessPiece p : board.getPieces().values()) {
+            int value = getPieceValue(p.type) * 10;
+            int progress = p.color == PieceColor.WHITE ? p.y : 7 - p.y;
+            int center = 14 - Math.abs(2 * p.x - 7) - Math.abs(2 * p.y - 7);
+            value += switch (p.type) {
+                case PAWN -> progress * 7 + center * 2;
+                case KNIGHT -> center * 6;
+                case BISHOP -> center * 3 + progress * 2;
+                case ROOK -> progress * 2;
+                case QUEEN -> center;
+                case KING -> -center * 2;
+            };
+            if (p.type != PieceType.PAWN && p.type != PieceType.KING) value += generatePseudoMoves(p, p.color).size() * 2;
+            if (p.type == PieceType.KING) {
+                int forward = p.color == PieceColor.WHITE ? 1 : -1;
+                for (int dx = -1; dx <= 1; dx++) {
+                    ChessPiece shield = board.getPieces().get((p.x + dx) + "," + (p.y + forward));
+                    if (shield != null && shield.color == p.color && shield.type == PieceType.PAWN) value += 12;
+                }
+            }
+            score += p.color == side ? value : -value;
+        }
+        return score;
     }
 
     private int evaluateMove(ChessMove move, ChessPiece mover, PieceColor color) {
@@ -270,7 +364,9 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
 
     private boolean sameMove(ChessMove first, ChessMove second) {
         return first.fromX == second.fromX && first.fromY == second.fromY
-                && first.toX == second.toX && first.toY == second.toY;
+                && first.toX == second.toX && first.toY == second.toY
+                && (first.promotion == null ? second.promotion == null
+                    : first.promotion == (second.promotion == null ? PieceType.QUEEN : second.promotion));
     }
 
     private void switchPlayer() {
@@ -278,13 +374,15 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
     }
 
     private void checkGameEnd() {
-        // Simplified - in real implementation check checkmate/stalemate
-        if (board.isKingCaptured(PieceColor.WHITE)) {
-            status = GameStatus.FINISHED;
-            winner = player2;
-        } else if (board.isKingCaptured(PieceColor.BLACK)) {
-            status = GameStatus.FINISHED;
-            winner = player1;
+        PieceColor side = currentPlayer.equals(player1) ? PieceColor.WHITE : PieceColor.BLACK;
+        if (legalMoves(side).isEmpty()) {
+            if (inCheck(side)) {
+                status = GameStatus.FINISHED;
+                winner = side == PieceColor.WHITE ? player2 : player1;
+            } else {
+                status = GameStatus.DRAW;
+                winner = null;
+            }
         }
     }
 
@@ -323,6 +421,14 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
 
     public static class ChessBoard {
         private final Map<String, ChessPiece> pieces = new HashMap<>();
+        private String enPassant;
+        public record BoardSnapshot(Map<String, ChessPiece> pieces, String enPassant) {}
+
+        public BoardSnapshot save() { return new BoardSnapshot(snapshot(), enPassant); }
+        public void load(BoardSnapshot state) {
+            restore(state.pieces());
+            enPassant = state.enPassant();
+        }
 
         public ChessBoard() {
             setupInitialPosition();
@@ -373,28 +479,43 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
 
         public void restore(Map<String, ChessPiece> snapshot) {
             pieces.clear();
-            pieces.putAll(snapshot);
+            snapshot.forEach((key, piece) -> pieces.put(key,
+                    new ChessPiece(piece.type, piece.color, piece.x, piece.y, piece.hasMoved)));
+            enPassant = null;
         }
 
         public boolean isValidMove(ChessMove move, PieceColor color) {
             ChessPiece piece = pieces.get(move.fromX + "," + move.fromY);
             if (piece == null || piece.getColor() != color) return false;
 
-            // Simplified validation - real implementation needs full chess rules
+            // Ownership guard; the game also validates movement and king safety.
             return true;
         }
 
         public void executeMove(ChessMove move) {
-            String fromKey = move.fromX + "," + move.fromY;
-            String toKey = move.toX + "," + move.toY;
-
-            ChessPiece piece = pieces.remove(fromKey);
-            if (piece != null) {
-                piece.setX(move.toX);
-                piece.setY(move.toY);
-                piece.setHasMoved(true);
-                pieces.put(toKey, piece);
+            ChessPiece piece = pieces.remove(move.fromX + "," + move.fromY);
+            if (piece == null) return;
+            if (piece.type == PieceType.PAWN && move.fromX != move.toX
+                    && (move.toX + "," + move.toY).equals(enPassant)) {
+                pieces.remove(move.toX + "," + move.fromY);
             }
+            enPassant = piece.type == PieceType.PAWN && Math.abs(move.toY - move.fromY) == 2
+                    ? move.fromX + "," + ((move.fromY + move.toY) / 2) : null;
+            if (piece.type == PieceType.KING && Math.abs(move.toX - move.fromX) == 2) {
+                ChessPiece rook = pieces.remove((move.toX > move.fromX ? 7 : 0) + "," + move.fromY);
+                if (rook != null) {
+                    rook.x = move.toX > move.fromX ? 5 : 3;
+                    rook.hasMoved = true;
+                    pieces.put(rook.x + "," + rook.y, rook);
+                }
+            }
+            piece.x = move.toX;
+            piece.y = move.toY;
+            piece.hasMoved = true;
+            if (piece.type == PieceType.PAWN && (piece.y == 0 || piece.y == 7)) {
+                piece.type = move.promotion == null ? PieceType.QUEEN : move.promotion;
+            }
+            pieces.put(move.toX + "," + move.toY, piece);
         }
 
         public boolean isKingCaptured(PieceColor color) {
@@ -414,8 +535,9 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
         private final String winner;
         private final List<ChessMove> legalMoves;
         private final ChessMove lastMove;
+        private final boolean check;
 
-        public ChessGameState(Map<String, ChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String whitePlayer, String blackPlayer, String winner, List<ChessMove> legalMoves, ChessMove lastMove) {
+        public ChessGameState(Map<String, ChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String whitePlayer, String blackPlayer, String winner, List<ChessMove> legalMoves, ChessMove lastMove, boolean check) {
             this.pieces = pieces;
             this.currentPlayer = currentPlayer;
             this.status = status;
@@ -425,6 +547,7 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
             this.winner = winner;
             this.legalMoves = legalMoves;
             this.lastMove = lastMove;
+            this.check = check;
         }
     }
 }

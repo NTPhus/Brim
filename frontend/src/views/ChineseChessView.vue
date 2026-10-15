@@ -60,6 +60,14 @@ const isMyTurn = computed(
 
 const isCheck = computed(() => gameState.value?.check ?? false)
 const lastMove = computed(() => gameState.value?.lastMove ?? null)
+const historyRows = computed(() => {
+  const moves = gameState.value?.moveHistory ?? []
+  return Array.from({ length: Math.ceil(moves.length / 2) }, (_, index) => ({
+    number: index + 1,
+    red: formatMove(moves[index * 2]),
+    black: formatMove(moves[index * 2 + 1])
+  }))
+})
 
 const legalTargets = computed(() => {
   if (!selectedCell.value) return new Set<string>()
@@ -74,6 +82,14 @@ function pieceLabel(piece: XiangqiPiece): string {
     HORSE: ['傌', '馬'], CHARIOT: ['俥', '車'], CANNON: ['炮', '砲'], SOLDIER: ['兵', '卒']
   }
   return labels[piece.type]?.[piece.color === 'RED' ? 0 : 1] ?? PIECE_LABELS[piece.type]
+}
+
+function formatMove(raw?: string): string {
+  if (!raw) return '—'
+  const match = raw.match(/fromX=(\d+), fromY=(\d+), toX=(\d+), toY=(\d+)/)
+  if (!match) return raw.replace(/^ChineseChessMove\[|\]$/g, '')
+  const [, fx, fy, tx, ty] = match.map(Number)
+  return `(${fx},${fy}) → (${tx},${ty})`
 }
 
 watch(() => gameState.value?.currentPlayer, () => {
@@ -284,8 +300,11 @@ function handleRestart() {
 
       <aside class="history" v-if="gameState?.moveHistory?.length">
         <h4>Lịch sử nước đi</h4>
+        <div class="history-columns"><span>#</span><span>Đỏ</span><span>Đen</span></div>
         <div class="move-list">
-          <span v-for="(move, i) in gameState.moveHistory" :key="i" class="move-item">{{ i + 1 }}. {{ move }}</span>
+          <div v-for="row in historyRows" :key="row.number" class="move-row">
+            <b>{{ row.number }}</b><span>{{ row.red }}</span><span>{{ row.black }}</span>
+          </div>
         </div>
       </aside>
 
@@ -479,8 +498,11 @@ function handleRestart() {
 
 .history { width: 210px; background: var(--bg-card); padding: 1rem; border-radius: 12px; border: 1px solid var(--border); }
 .history h4 { margin: 0 0 .5rem; font-size: .85rem; color: var(--text-secondary); }
+.history-columns { display: grid; grid-template-columns: 22px 1fr 1fr; gap: .3rem; padding: 0 .35rem .25rem; color: var(--text-muted); font-size: .62rem; text-transform: uppercase; }
 .move-list { display: flex; flex-direction: column; gap: .35rem; max-height: 360px; overflow-y: auto; }
-.move-item { background: rgba(255,255,255,.05); padding: .25rem .45rem; border-radius: 4px; font-size: .75rem; font-family: monospace; }
+.move-row { display: grid; grid-template-columns: 22px 1fr 1fr; gap: .3rem; align-items: center; padding: .32rem .35rem; border-radius: 6px; background: rgba(255,255,255,.05); font-size: .7rem; }
+.move-row b { color: #fbbf24; }
+.move-row span { color: var(--text-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
 
 @media (max-width: 760px) {
   .board-wrapper { flex-direction: column; align-items: center; }
