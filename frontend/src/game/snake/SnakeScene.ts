@@ -1,3 +1,4 @@
+import { createId } from '@/utils/id'
 import Phaser from 'phaser'
 import type { SnakeFood, SnakeGameState, SnakePosition } from '@/types/gameState'
 
@@ -5,7 +6,7 @@ const SNAKE_COLORS = [0x2ecc71, 0x3498db, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xe74c3c
 
 export class SnakeScene extends Phaser.Scene {
   private graphics!: Phaser.GameObjects.Graphics
-  private playerId: string = crypto.randomUUID()
+  private playerId: string = createId()
   private targetState: SnakeGameState | null = null
   private renderBodies = new Map<string, SnakePosition[]>()
   private cameraReady = false
@@ -15,6 +16,7 @@ export class SnakeScene extends Phaser.Scene {
   create() { this.graphics = this.add.graphics() }
 
   updateGameState(state: SnakeGameState) {
+    for (const id of this.renderBodies.keys()) if (!state.snakes[id]) this.renderBodies.delete(id)
     this.targetState = state
     this.cameras.main.setBounds(0, 0, state.gridWidth, state.gridHeight)
   }
@@ -61,7 +63,7 @@ export class SnakeScene extends Phaser.Scene {
     const me = state.snakes[this.playerId]
     const body = this.renderBodies.get(this.playerId)
     if (!me?.alive || !body?.[0]) return
-    const desiredZoom = Phaser.Math.Clamp(1.32 - Math.log2(Math.max(18, me.maxLength) / 18) * 0.16, 0.52, 1.32)
+    const desiredZoom = Math.max(this.scale.width / 3200, this.scale.height / 2000, Phaser.Math.Clamp(1.32 - Math.log2(Math.max(18, me.maxLength) / 18) * 0.16, 0.52, 1.32))
     const camera = this.cameras.main
     camera.setZoom(Phaser.Math.Linear(camera.zoom, desiredZoom, 0.045))
     if (!this.cameraReady) {
@@ -78,7 +80,7 @@ export class SnakeScene extends Phaser.Scene {
   private drawArena() {
     const width = this.targetState?.gridWidth ?? 0
     const height = this.targetState?.gridHeight ?? 0
-    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 120, 120)
+    const view = Phaser.Geom.Rectangle.Inflate(Phaser.Geom.Rectangle.Clone(this.cameras.main.worldView), 120, 120)
     this.graphics.fillStyle(0x070b17, 1)
     this.graphics.fillRect(view.x, view.y, view.width, view.height)
     this.graphics.lineStyle(1, 0x17213b, 0.42)
@@ -108,7 +110,7 @@ export class SnakeScene extends Phaser.Scene {
   }
 
   private drawSnakes(state: SnakeGameState) {
-    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 120, 120)
+    const view = Phaser.Geom.Rectangle.Inflate(Phaser.Geom.Rectangle.Clone(this.cameras.main.worldView), 120, 120)
     let colorIndex = 0
     for (const [id, snake] of Object.entries(state.snakes)) {
       const body = this.renderBodies.get(id)

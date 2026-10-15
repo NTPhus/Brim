@@ -5,8 +5,8 @@ Multi-game platform with Spring Boot, Kafka, WebSocket supporting real-time and 
 ## Games Included
 - **Snake** (Real-time, WebSocket + Phaser)
 - **Tank Battle** (Real-time, WebSocket + Phaser)
-- **Chess** (Turn-based, Kafka)
-- **Chinese Chess** (Turn-based, Kafka)
+- **Chess** (Turn-based, WebSocket; optional Kafka learning mode)
+- **Chinese Chess** (Turn-based, WebSocket; optional Kafka learning mode)
 
 ## Chess and Chinese Chess bots
 
@@ -18,7 +18,7 @@ Both games use the built-in Java engine in `game/ai/AlphaBetaSearch.java`; no ex
 | Medium | 3 | 450 ms |
 | Hard | 6 | 1,500 ms |
 
-A ply is one move by one side. The engine searches increasingly deep iterations and returns the best move from the last completed iteration. Actual depth depends on the position and CPU speed. The time budget excludes the existing 800 ms bot-turn delay and can overrun by the cost of one move-generation/evaluation operation.
+A ply is one move by one side. The engine searches increasingly deep iterations and returns the best move from the last completed iteration. Actual depth depends on the position and CPU speed. The time budget excludes waiting in the bounded bot worker queue and can overrun by the cost of one move-generation/evaluation operation.
 
 Search uses negamax with alpha–beta pruning, capture ordering, a bounded per-search transposition table, and up to six additional plies of quiescence search for captures, promotions, and check evasions. Evaluation includes material, development, centralization, mobility, pawn progress, and a king pawn shield in chess. Xiangqi additionally rewards soldiers crossing the river. Search runs on a detached board copy.
 
@@ -28,22 +28,22 @@ This is a custom engine, not a Stockfish integration. Opening books, endgame tab
 
 Run backend regression tests with `mvn test`. Tests cover tactical traps, immediate wins, legal moves, special moves, state isolation, search depth, quiescence, and interruption/timeout cleanup.
 
+## Tài liệu phát triển
+
+- [Deploy Docker và chơi cùng phòng qua LAN/Internet](docs/DEPLOYMENT.md)
+- [Kiến trúc, runtime và cách đăng ký game mới](docs/ARCHITECTURE.md)
+- [Mạng kém, AOI, giới hạn CPU/RAM và đo tải](docs/NETWORKING_AND_PERFORMANCE.md)
+- [Bài thực hành Kafka: topic, group, offset, retry, DLT, dedup](docs/KAFKA_LAB.md)
+- [Lộ trình game mới: Connect Four, Caro, Othello, Battleship, match-3, Bomberman](docs/GAME_ROADMAP.md)
+- [Lộ trình học Spring Boot bằng chính BRIM](docs/SPRING_BOOT_LEARNING.md)
+
 ## Architecture
 
-```
-┌─────────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Vue 3 + Phaser     │────▶│  Spring Boot     │────▶│   Redis         │
-│  (Browser)          │◀───│  WebSocket       │     │  (Room/Session) │
-└─────────────────────┘     └────────┬─────────┘     └─────────────────┘
-                                     │
-                        ┌────────────┴────────────┐
-                        ▼                         ▼
-               ┌─────────────────┐       ┌─────────────────┐
-               │ Real-time Games │       │ Turn-based Games│
-               │ (Snake, Tank)   │       │ (Chess, C-Chess)│
-               │ Server game loop│       │   Kafka Topics  │
-               └─────────────────┘       └─────────────────┘
-```
+Vue/Phaser → REST/STOMP → backend sở hữu simulation. Realtime dùng worker tick chung, snapshot theo vùng nhìn và worker output riêng. Bot cờ dùng pool CPU có giới hạn. Kafka xử lý điểm/sự kiện nền; nước cờ mặc định xử lý trực tiếp, có tùy chọn bật đường Kafka để học. Redis giữ room metadata và bảng điểm. Trạng thái trận vẫn ở RAM của **một backend**.
+
+Tank có ba map Arena/Warehouse/Crossroads, item hồi máu/khiên/tăng tốc/bắn nhanh và [asset Kenney CC0](frontend/public/assets/kenney-tanks/SOURCE.md).
+
+![Tank Battle](docs/images/tank-preview.png)
 
 ## Tech Stack
 
@@ -58,6 +58,15 @@ Run backend regression tests with `mvn test`. Tests cover tactical traps, immedi
 | Infra | Docker Compose |
 
 ## Quick Start
+
+Chạy trọn bộ bằng Docker:
+
+```bash
+docker compose -f docker-compose.deploy.yml up -d --build
+# Mở http://localhost:8088
+```
+
+Phát triển bằng backend/frontend local:
 
 ### 1. Start Infrastructure
 ```bash
@@ -125,7 +134,8 @@ Endpoint: `/api/ws/game`
 | Destination | Payload |
 |-------------|---------|
 | `/topic/room/{roomId}/state` | `GameRoom` |
-| `/topic/game/{roomId}/state` | `SnakeGameState` / `TankGameState` / `ChessGameState` |
+| `/topic/game/{roomId}/state` | Chess / Chinese Chess state |
+| `/topic/game/{roomId}/state/{playerId}` | Snake / Tank snapshot trong vùng nhìn |
 | `/topic/game/{roomId}/started` | `GameMessage` |
 | `/topic/game/{roomId}/over` | `GameMessage` |
 | `/user/queue/errors` | `GameMessage<string>` |
@@ -194,6 +204,3 @@ Frontend proxy (`frontend/vite.config.ts`): `/api` → `http://localhost:8080`
 ## License
 
 MIT
-# Brim
-# Brim
-# Brim

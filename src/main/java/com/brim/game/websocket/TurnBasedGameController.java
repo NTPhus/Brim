@@ -20,6 +20,8 @@ import org.springframework.stereotype.Controller;
 @Slf4j
 public class TurnBasedGameController {
 
+    @org.springframework.beans.factory.annotation.Value("${game.kafka.route-moves:false}")
+    private boolean routeMovesThroughKafka;
     private final RoomService roomService;
     private final TurnBasedGameService turnBasedGameService;
     private final GameEventProducer eventProducer;
@@ -75,7 +77,8 @@ public class TurnBasedGameController {
 
     @MessageMapping("/turn/{roomId}/move")
     public void makeMove(@DestinationVariable String roomId, GameMessage<Object> message) {
-        eventProducer.sendGameMove(roomId, message.getPlayerId(), message.getPayload());
+        if (routeMovesThroughKafka) eventProducer.sendGameMove(roomId, message.getPlayerId(), message.getPayload());
+        else turnBasedGameService.processMove(roomId, message.getPlayerId(), message.getPayload());
     }
 
     @MessageMapping("/turn/{roomId}/ready")

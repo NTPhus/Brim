@@ -36,6 +36,7 @@ public class RoomRestController {
         String difficulty = request.difficulty() == null ? "MEDIUM" : request.difficulty().toUpperCase();
         if (!List.of("EASY", "MEDIUM", "HARD").contains(difficulty)) difficulty = "MEDIUM";
         room.getSettings().getCustomSettings().put("difficulty", difficulty);
+        room.getSettings().getCustomSettings().put("mapId", com.brim.game.game.tank.TankMaps.parse(request.mapId()).name());
         roomService.saveRoom(room);
         return ResponseEntity.ok(room);
     }
@@ -122,6 +123,6 @@ public class RoomRestController {
         return ResponseEntity.ok().build();
     }
 
-    public record CreateRoomRequest(String name, GameType gameType, int maxPlayers, String hostId, String hostUsername, String difficulty) {}
+    public record CreateRoomRequest(String name, GameType gameType, int maxPlayers, String hostId, String hostUsername, String difficulty, String mapId) {}
     public record JoinRequest(String username, String sessionId, String playerId) {}
 }

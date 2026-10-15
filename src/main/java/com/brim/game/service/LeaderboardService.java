@@ -13,6 +13,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.time.LocalDate;
+import java.time.Instant;
+import java.time.ZoneId;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.scheduling.annotation.Scheduled;
 
 @Service
 @RequiredArgsConstructor
@@ -21,15 +25,39 @@ public class LeaderboardService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
 
+    private static final ZoneId ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private final Set<GameType> dirty = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final DefaultRedisScript<Long> APPLY_SCORE = new DefaultRedisScript<>("""
+        if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then return 0 end
+        redis.call('ZINCRBY', KEYS[1], ARGV[2], ARGV[3])
+        redis.call('SADD', KEYS[2], ARGV[1])
+        redis.call('EXPIRE', KEYS[1], 259200)
+        redis.call('EXPIRE', KEYS[2], 259200)
+        return 1
+        """, Long.class);
+
     public void record(GameScoreEvent event) {
-        if (event == null || event.playerId() == null || event.points() <= 0) return;
+        if (event == null || event.eventId() == null || event.playerId() == null || event.gameType() == null || event.points() <= 0) return;
+        LocalDate day = Instant.ofEpochMilli(event.occurredAt()).atZone(ZONE).toLocalDate();
+        LocalDate today = LocalDate.now(ZONE);
+        if (day.isBefore(today.minusDays(2)) || day.isAfter(today)) return;
         String member = event.playerId() + "\u001f" + sanitize(event.username());
-        String key = keyFor(event.gameType());
-        redisTemplate.opsForZSet().incrementScore(key, member, event.points());
-        // Expire shortly after the day rolls over so stale daily boards do not accumulate forever.
-        redisTemplate.expire(key, java.time.Duration.ofDays(3));
-        messagingTemplate.convertAndSend("/topic/leaderboard", getTop(null, 12));
-        messagingTemplate.convertAndSend("/topic/leaderboard/" + event.gameType().name(), getTop(event.gameType(), 8));
+        String key = KEY_PREFIX + day + ":" + event.gameType().name();
+        Long applied = redisTemplate.execute(APPLY_SCORE, List.of(key, "leaderboard:events:" + day),
+                event.eventId(), event.points(), member);
+        if (Long.valueOf(1).equals(applied)) dirty.add(event.gameType());
+    }
+
+    @Scheduled(fixedDelay = 1000)
+    public void broadcastChangedBoards() {
+        boolean changed = false;
+        for (GameType type : GameType.values()) {
+            if (dirty.remove(type)) {
+                changed = true;
+                messagingTemplate.convertAndSend("/topic/leaderboard/" + type.name(), getTop(type, 8));
+            }
+        }
+        if (changed) messagingTemplate.convertAndSend("/topic/leaderboard", getTop(null, 12));
     }
 
     public List<LeaderboardEntry> getTop(GameType filter, int limit) {
@@ -53,6 +81,6 @@ public class LeaderboardService {
     }
 
     private String keyFor(GameType type) {
-        return KEY_PREFIX + LocalDate.now() + ":" + type.name();
+        return KEY_PREFIX + LocalDate.now(ZONE) + ":" + type.name();
     }
 }

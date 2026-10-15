@@ -4,16 +4,19 @@ import com.brim.game.model.dto.Player;
 import lombok.Data;
 
 import java.util.*;
+import com.brim.game.runtime.InterestArea;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Data
-public class TankGame {
+public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.TankGameState> {
     private final String roomId;
     private final int mapWidth;
     private final int mapHeight;
     private final double tankSpeed;
     private final double bulletSpeed;
     private final long tickRateMs;
+    private final TankMaps.Layout mapLayout;
 
     private final Map<String, Tank> tanks = new ConcurrentHashMap<>();
     private final List<Bullet> bullets = Collections.synchronizedList(new ArrayList<>());
@@ -25,6 +28,11 @@ public class TankGame {
     private int botDecisionTick = 0;
 
     public TankGame(String roomId, int mapWidth, int mapHeight, double tankSpeed, double bulletSpeed, long tickRateMs) {
+        this(roomId, mapWidth, mapHeight, tankSpeed, bulletSpeed, tickRateMs, "ARENA");
+    }
+
+    public TankGame(String roomId, int mapWidth, int mapHeight, double tankSpeed, double bulletSpeed, long tickRateMs, String mapId) {
+        this.mapLayout = TankMaps.parse(mapId);
         this.roomId = roomId;
         this.mapWidth = mapWidth;
         this.mapHeight = mapHeight;
@@ -35,29 +43,30 @@ public class TankGame {
         spawnHealthPacks();
     }
 
-    public void addPlayer(Player player) {
+    public synchronized void addPlayer(Player player) {
         Tank tank = new Tank(player.getId(), generateSpawnPosition());
         if (player.getColor() != null && player.getColor().matches("#[0-9a-fA-F]{6}")) tank.setColor(player.getColor());
         tanks.put(player.getId(), tank);
     }
 
-    public void removePlayer(String playerId) {
+    public synchronized void removePlayer(String playerId) {
         tanks.remove(playerId);
     }
 
-    public void handleInput(String playerId, TankInput input) {
+    public synchronized void handleInput(String playerId, TankInput input) {
         Tank tank = tanks.get(playerId);
         if (tank != null && tank.isAlive()) {
             tank.setInput(input);
+            tank.lastInputAt = System.currentTimeMillis();
         }
     }
 
-    public void setColor(String playerId, String color) {
+    public synchronized void setColor(String playerId, String color) {
         Tank tank = tanks.get(playerId);
         if (tank != null && color != null && color.matches("#[0-9a-fA-F]{6}")) tank.setColor(color);
     }
 
-    public GameState update() {
+    public synchronized GameState update() {
         long now = System.currentTimeMillis();
         if (now - lastTick < tickRateMs) return state;
         lastTick = now;
@@ -166,6 +175,7 @@ public class TankGame {
         tanks.values().forEach(tank -> {
             if (!tank.isAlive()) return;
 
+            if (!tank.playerId.startsWith("bot-") && System.currentTimeMillis() - tank.lastInputAt > 750) tank.input = null;
             TankInput input = tank.getInput();
             if (input == null) return;
 
@@ -175,12 +185,13 @@ public class TankGame {
 
             // Movement
             double dx = 0, dy = 0;
+            double movementSpeed = tankSpeed * (tank.speedUntil > System.currentTimeMillis() ? 1.35 : 1);
             if (input.forward()) {
-                dx = Math.cos(tank.getAngle()) * tankSpeed;
-                dy = Math.sin(tank.getAngle()) * tankSpeed;
+                dx = Math.cos(tank.getAngle()) * movementSpeed;
+                dy = Math.sin(tank.getAngle()) * movementSpeed;
             } else if (input.backward()) {
-                dx = -Math.cos(tank.getAngle()) * tankSpeed * 0.5;
-                dy = -Math.sin(tank.getAngle()) * tankSpeed * 0.5;
+                dx = -Math.cos(tank.getAngle()) * movementSpeed * 0.5;
+                dy = -Math.sin(tank.getAngle()) * movementSpeed * 0.5;
             }
 
             double newX = tank.getX() + dx;
@@ -261,11 +272,17 @@ public class TankGame {
                 HealthPack item = items.next();
                 boolean pickedUp = false;
                 for (Tank tank : tanks.values()) {
-                    if (!tank.isAlive() || tank.getHealth() >= 100) continue;
+                    if (!tank.isAlive() || (item.type == ItemType.HEALTH && tank.getHealth() >= 100)) continue;
                     double dx = tank.getX() - item.getX();
                     double dy = tank.getY() - item.getY();
                     if (dx * dx + dy * dy <= Math.pow(tank.getRadius() + item.getRadius(), 2)) {
-                        tank.setHealth(Math.min(100, tank.getHealth() + item.getHealAmount()));
+                        long now = System.currentTimeMillis();
+                        switch (item.type) {
+                            case HEALTH -> tank.setHealth(Math.min(100, tank.getHealth() + item.getHealAmount()));
+                            case SHIELD -> tank.shieldUntil = now + 10_000;
+                            case SPEED -> tank.speedUntil = now + 6000;
+                            case RAPID_FIRE -> tank.rapidFireUntil = now + 6000;
+                        }
                         pickedUp = true;
                         break;
                     }
@@ -277,15 +294,18 @@ public class TankGame {
 
     private void spawnHealthPacks() {
         synchronized (healthPacks) {
-            while (healthPacks.size() < 12) {
+            for (int attempt = 0; healthPacks.size() < 12 && attempt < 100; attempt++) {
                 int x = 40 + random.nextInt(Math.max(1, mapWidth - 80));
                 int y = 40 + random.nextInt(Math.max(1, mapHeight - 80));
-                if (canMove(x, y, 16)) healthPacks.add(new HealthPack(x, y, 12, 35));
+                if (canMove(x, y, 16)) {
+                    ItemType type = random.nextInt(10) < 5 ? ItemType.HEALTH : ItemType.values()[1 + random.nextInt(3)];
+                    healthPacks.add(new HealthPack(x, y, 12, type == ItemType.HEALTH ? 35 : 0, type));
+                }
             }
         }
     }
 
-    public boolean respawn(String playerId) {
+    public synchronized boolean respawn(String playerId) {
         Tank tank = tanks.get(playerId);
         if (tank == null || tank.alive || System.currentTimeMillis() - tank.diedAt < 3000) return false;
         String color = tank.color;
@@ -304,6 +324,7 @@ public class TankGame {
     }
 
     private void shoot(Tank tank) {
+        if (bullets.size() >= 512) return;
         double bx = tank.getX() + Math.cos(tank.getAngle()) * (tank.getRadius() + 10);
         double by = tank.getY() + Math.sin(tank.getAngle()) * (tank.getRadius() + 10);
         bullets.add(new Bullet(bx, by, tank.getAngle(), tank.getPlayerId()));
@@ -333,23 +354,7 @@ public class TankGame {
         return true;
     }
 
-    private void generateWalls() {
-        // Border walls
-        walls.add(new Wall(0, 0, mapWidth, 20)); // Top
-        walls.add(new Wall(0, mapHeight - 20, mapWidth, 20)); // Bottom
-        walls.add(new Wall(0, 0, 20, mapHeight)); // Left
-        walls.add(new Wall(mapWidth - 20, 0, 20, mapHeight)); // Right
-
-        // Random internal walls
-        int wallCount = Math.max(16, (mapWidth * mapHeight) / 130000);
-        for (int i = 0; i < wallCount; i++) {
-            int x = 100 + random.nextInt(mapWidth - 200);
-            int y = 100 + random.nextInt(mapHeight - 200);
-            int w = 40 + random.nextInt(80);
-            int h = 40 + random.nextInt(80);
-            walls.add(new Wall(x, y, w, h));
-        }
-    }
+    private void generateWalls() { walls.addAll(TankMaps.walls(mapLayout, mapWidth, mapHeight)); }
 
     private Position generateSpawnPosition() {
         int margin = 50;
@@ -361,16 +366,31 @@ public class TankGame {
         return new Position(margin, margin);
     }
 
-    public TankGameState getGameState() {
-        return new TankGameState(
-                new HashMap<>(tanks),
-                new ArrayList<>(bullets),
-                new ArrayList<>(healthPacks),
-                walls,
-                state,
-                mapWidth,
-                mapHeight
-        );
+    public synchronized TankGameState getGameState() { return snapshot(null); }
+
+    public synchronized TankGameState getGameState(String viewerId) {
+        Tank viewer = tanks.get(viewerId);
+        InterestArea area = viewer == null ? new InterestArea(mapWidth / 2.0, mapHeight / 2.0, 1300, 900)
+                : new InterestArea(viewer.x, viewer.y, 1300, 900);
+        return snapshot(area);
+    }
+
+    private TankGameState snapshot(InterestArea area) {
+        Map<String, Tank> visible = new HashMap<>();
+        for (Tank tank : tanks.values()) {
+            if (area != null && !area.contains(tank.x, tank.y)) continue;
+            Tank copy = new Tank(tank.playerId, new Position(0, 0));
+            copy.x = tank.x; copy.y = tank.y;
+            copy.color = tank.color; copy.angle = tank.angle; copy.health = tank.health;
+            copy.score = tank.score; copy.alive = tank.alive; copy.diedAt = tank.diedAt;
+            copy.shieldUntil = tank.shieldUntil; copy.speedUntil = tank.speedUntil; copy.rapidFireUntil = tank.rapidFireUntil;
+            visible.put(tank.playerId, copy);
+        }
+        List<Bullet> visibleBullets = bullets.stream().filter(b -> area == null || area.contains(b.x, b.y))
+                .map(b -> { Bullet copy = new Bullet(b.x, b.y, b.angle, b.ownerId); copy.life = b.life; return copy; }).toList();
+        List<HealthPack> visibleItems = healthPacks.stream().filter(i -> area == null || area.contains(i.x, i.y)).toList();
+        List<Wall> visibleWalls = walls.stream().filter(w -> area == null || area.intersects(w.x, w.y, w.width, w.height)).toList();
+        return new TankGameState(visible, visibleBullets, visibleItems, visibleWalls, state, mapWidth, mapHeight);
     }
 
     public enum GameState { WAITING, IN_PROGRESS, FINISHED }
@@ -385,9 +405,11 @@ public class TankGame {
         private int score = 0;
         private boolean alive = true;
         private final int radius = 20;
-        private TankInput input;
+        @JsonIgnore private TankInput input;
+        @JsonIgnore private long lastInputAt;
         private int shootCooldown = 0;
         private long diedAt;
+        private long shieldUntil, speedUntil, rapidFireUntil;
         private static final int SHOOT_COOLDOWN_MAX = 10;
 
         public Tank(String playerId, Position pos) {
@@ -397,9 +419,16 @@ public class TankGame {
         }
 
         public boolean canShoot() { return shootCooldown <= 0; }
-        public void resetShootCooldown() { shootCooldown = playerId.startsWith("bot-") ? 18 : SHOOT_COOLDOWN_MAX; }
+        public void resetShootCooldown() {
+            int base = playerId.startsWith("bot-") ? 18 : SHOOT_COOLDOWN_MAX;
+            shootCooldown = rapidFireUntil > System.currentTimeMillis() ? Math.max(3, base / 2) : base;
+        }
         public void updateCooldown() { if (shootCooldown > 0) shootCooldown--; }
-        public void takeDamage(int damage) { health -= damage; if (health <= 0) alive = false; }
+        public void takeDamage(int damage) {
+            if (shieldUntil > System.currentTimeMillis()) { shieldUntil = 0; return; }
+            health = Math.max(0, health - damage);
+            if (health <= 0) alive = false;
+        }
         public void increaseScore(int points) { this.score += points; }
     }
 
@@ -416,9 +445,16 @@ public class TankGame {
         }
     }
 
+    public enum ItemType { HEALTH, SHIELD, SPEED, RAPID_FIRE }
+
     @Data
     public static class HealthPack {
         private final int x, y, radius, healAmount;
+        private final ItemType type;
+        public HealthPack(int x, int y, int radius, int healAmount) { this(x, y, radius, healAmount, ItemType.HEALTH); }
+        public HealthPack(int x, int y, int radius, int healAmount, ItemType type) {
+            this.x = x; this.y = y; this.radius = radius; this.healAmount = healAmount; this.type = type;
+        }
     }
 
     @Data
@@ -457,5 +493,6 @@ public class TankGame {
         private final GameState state;
         private final int mapWidth;
         private final int mapHeight;
+        private final long serverTime = System.currentTimeMillis();
     }
 }

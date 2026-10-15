@@ -20,6 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RoomService {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    @org.springframework.beans.factory.annotation.Value("${game.room.max-rooms:128}")
+    private int maxRooms = 128;
     private final Map<String, GameRoom> localRooms = new ConcurrentHashMap<>();
 
     private static final String ROOM_PREFIX = "room:";
@@ -29,7 +31,10 @@ public class RoomService {
         return createRoom(name, gameType, hostId, null, maxPlayers);
     }
 
-    public GameRoom createRoom(String name, GameType gameType, String hostId, String hostUsername, int maxPlayers) {
+    public synchronized GameRoom createRoom(String name, GameType gameType, String hostId, String hostUsername, int maxPlayers) {
+        if (getAllRooms().size() >= maxRooms) throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, "Server room limit reached");
+        maxPlayers = gameType == GameType.CHESS || gameType == GameType.CHINESE_CHESS ? 2 : Math.max(1, Math.min(16, maxPlayers));
         GameRoom room = GameRoom.create(name, gameType, hostId, maxPlayers, GameSettings.defaultFor(gameType));
 
         Player host = new Player();
@@ -77,14 +82,16 @@ public class RoomService {
         GameRoom room = getRoom(roomId);
         if (room == null) return false;
 
-        boolean alreadyInRoom = room.getPlayers().stream()
-                .anyMatch(p -> p.getId().equals(player.getId()));
-        if (!alreadyInRoom) {
-            if (!room.canJoin()) return false;
-            room.getPlayers().add(player);
-            saveRoom(room);
+        synchronized (room) {
+            boolean alreadyInRoom = room.getPlayers().stream()
+                    .anyMatch(p -> p.getId().equals(player.getId()));
+            if (!alreadyInRoom) {
+                if (!room.canJoin()) return false;
+                room.getPlayers().add(player);
+                saveRoom(room);
+            }
+            return true;
         }
-        return true;
     }
 
     public boolean leaveRoom(String roomId, String playerId) {

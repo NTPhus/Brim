@@ -27,6 +27,8 @@ const selectedColor = ref(localStorage.getItem('brim_tank_color') || '#2ecc71')
 const alive = ref(true)
 const diedAt = ref(0)
 const clock = ref(Date.now())
+const lastSnapshotAt = ref(Date.now())
+const networkStatus = computed(() => !stomp.connected.value ? 'Đang kết nối lại…' : clock.value - lastSnapshotAt.value > 1000 ? 'Mạng chậm · đang chờ cập nhật' : 'Đã kết nối')
 const myPlayerId = session.player.id
 
 const isConnecting = ref(true)
@@ -47,6 +49,15 @@ let tankScene: TankScene | null = null
 const pressedKeys = new Set<string>()
 const cleanupFns = ref<Array<() => void>>([])
 let clockTimer: number | undefined
+
+const activeEffects = computed(() => {
+  const tank = gameState.value?.tanks[myPlayerId]
+  return [
+    { label: 'Khiên', until: tank?.shieldUntil ?? 0 },
+    { label: 'Tăng tốc', until: tank?.speedUntil ?? 0 },
+    { label: 'Bắn nhanh', until: tank?.rapidFireUntil ?? 0 }
+  ].filter(effect => effect.until > clock.value)
+})
 
 const respawnRemaining = computed(() => Math.max(0, Math.ceil((diedAt.value + 3000 - clock.value) / 1000)))
 
@@ -140,7 +151,10 @@ function initPhaser() {
 onMounted(async () => {
   // Mount Phaser immediately
   initPhaser()
-  clockTimer = window.setInterval(() => { clock.value = Date.now() }, 200)
+  clockTimer = window.setInterval(() => {
+    clock.value = Date.now()
+    if (stomp.connected.value && alive.value) sendInput()
+  }, 100)
 
   // Fetch room metadata
   try {
@@ -158,7 +172,9 @@ onMounted(async () => {
     await stomp.connect()
     isConnecting.value = false
 
-    const unsubState = stomp.subscribe(`/topic/game/${roomId}/state`, (state: TankGameState) => {
+    const unsubState = stomp.subscribe(`/topic/game/${roomId}/state/${session.player.id}`, (state: TankGameState) => {
+      if ((state.serverTime ?? 0) < (gameState.value?.serverTime ?? 0)) return
+      lastSnapshotAt.value = Date.now()
       gameState.value = state
       tankScene?.updateGameState(state)
       if (state.state === 'IN_PROGRESS' || Object.keys(state.tanks).length > 0) {
@@ -192,6 +208,10 @@ onMounted(async () => {
       gameOverMessage.value = 'Chiến dịch kết thúc! 💥'
     })
     cleanupFns.value.push(unsubOver)
+    cleanupFns.value.push(stomp.subscribe(`/topic/game/${roomId}/error`, (error: { message: string }) => {
+      isGameOver.value = true
+      gameOverMessage.value = error.message
+    }))
 
     stomp.publish(`/app/tank/${roomId}/join`, {
       type: MessageType.JOIN_ROOM,
@@ -240,6 +260,9 @@ onMounted(async () => {
       sendInput()
     }
 
+    const releaseInput = () => { pressedKeys.clear(); updateInputState() }
+    window.addEventListener('blur', releaseInput)
+    cleanupFns.value.push(() => window.removeEventListener('blur', releaseInput))
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     cleanupFns.value.push(() => {
@@ -264,6 +287,10 @@ onUnmounted(() => {
 
 <template>
   <div class="tank-game">
+    <div class="network-strip" role="status">{{ networkStatus }} · Art: Kenney / CC0</div>
+    <div class="item-legend">✚ Hồi máu · ◯ Khiên 1 phát / 10s · » Tăng tốc 6s · » Bắn nhanh 6s
+      <strong v-for="effect in activeEffects" :key="effect.label">{{ effect.label }} {{ Math.ceil((effect.until - clock) / 1000) }}s</strong>
+    </div>
     <div class="game-header">
       <div class="header-actions">
         <button class="secondary" @click="handleGoToLobby">← Về sảnh</button>
@@ -340,6 +367,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.network-strip { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 1rem; font-size: .75rem; color: #bbdccb; background: #17261f; border-bottom: 1px solid #34523f; }
+.network-strip span { color: #91a89a; }
+.item-legend { padding: .45rem 1rem; color: #bad2c2; background: #112019; font-size: .75rem; }
+.item-legend strong { display: inline-block; margin-left: .75rem; color: #f7dc86; }
+
 .tank-game {
   width: 100%;
   max-width: none;

@@ -40,7 +40,7 @@ public class RoomCleanupScheduler {
             String reason = "";
 
             // 1. Empty rooms (no players)
-            if (room.getPlayers() == null || room.getPlayers().isEmpty()) {
+            if (room.getPlayers() == null || room.getPlayers().stream().noneMatch(p -> !p.getId().startsWith("bot-"))) {
                 shouldDelete = true;
                 reason = "empty (no players)";
             }

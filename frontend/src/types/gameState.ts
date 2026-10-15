@@ -26,6 +26,7 @@ export interface SnakeSnake {
 }
 
 export interface SnakeGameState {
+  serverTime?: number
   snakes: Record<string, SnakeSnake>
   food: SnakeFood[]
   state: 'WAITING' | 'IN_PROGRESS' | 'FINISHED'
@@ -47,6 +48,9 @@ export interface TankTank {
   alive: boolean
   radius: number
   shootCooldown: number
+  shieldUntil?: number
+  speedUntil?: number
+  rapidFireUntil?: number
   diedAt: number
 }
 
@@ -60,6 +64,7 @@ export interface TankBullet {
 }
 
 export interface TankHealthPack {
+  type?: 'HEALTH' | 'SHIELD' | 'SPEED' | 'RAPID_FIRE'
   x: number
   y: number
   radius: number
@@ -82,6 +87,7 @@ export interface TankInput {
 }
 
 export interface TankGameState {
+  serverTime?: number
   tanks: Record<string, TankTank>
   bullets: TankBullet[]
   healthPacks: TankHealthPack[]

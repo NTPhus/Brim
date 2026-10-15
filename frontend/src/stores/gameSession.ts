@@ -1,3 +1,4 @@
+import { createId } from '@/utils/id'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { GameRoom, Player } from '@/types/game'
@@ -28,9 +29,9 @@ export const useGameSession = defineStore('gameSession', () => {
       }
     }
     const newPlayer: Player = {
-      id: crypto.randomUUID(),
+      id: createId(),
       username: 'Player_' + Math.random().toString(36).slice(2, 7),
-      sessionId: crypto.randomUUID(),
+      sessionId: createId(),
       score: 0,
       ready: false,
       state: 'WAITING'

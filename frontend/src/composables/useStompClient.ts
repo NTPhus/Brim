@@ -1,152 +1,91 @@
-import { Client, IMessage } from '@stomp/stompjs'
+import { createId } from '@/utils/id'
+import { Client, IMessage, StompSubscription } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 import { ref } from 'vue'
 
-const WS_URL = '/api/ws/game'
-
 export type MessageHandler<T = unknown> = (message: T) => void
-
-let sharedClient: Client | null = null
-let connectPromise: Promise<void> | null = null
 const connected = ref(false)
-const sessionId = ref(crypto.randomUUID())
+const sessionId = ref(createId())
+const subscriptions = new Set<{ destination: string; handler: MessageHandler<unknown>; active?: StompSubscription }>()
+const joins = new Map<string, { body: unknown; roomId: string }>()
+let client: Client | null = null
+let connection: Promise<void> | null = null
+let hasConnected = false
+const readyListeners = new Set<() => void>()
 
-// Queue subscriptions that were requested before connection was ready
-type PendingSubscription = {
-  destination: string
-  handler: MessageHandler<unknown>
-  resolve: (unsub: () => void) => void
+function attach(entry: typeof subscriptions extends Set<infer T> ? T : never) {
+  entry.active = client!.subscribe(entry.destination, (message: IMessage) => {
+    try { entry.handler(JSON.parse(message.body)) }
+    catch (error) { console.error('WebSocket message error', error) }
+  })
 }
-const pendingSubscriptions: PendingSubscription[] = []
 
 export function useStompClient() {
-  async function connect(): Promise<void> {
-    if (sharedClient?.connected) return
-    if (connectPromise) return connectPromise
-
-    connectPromise = new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
+  function connect(): Promise<void> {
+    if (client?.connected) return Promise.resolve()
+    if (connection) return connection
+    connection = new Promise<void>((resolve, reject) => {
+      const finish = () => { clearTimeout(timeout); readyListeners.delete(finish); resolve() }
+      const timeout = window.setTimeout(() => {
+        readyListeners.delete(finish)
         reject(new Error('WebSocket connection timeout'))
       }, 10000)
-
-      if (sharedClient) {
-        void sharedClient.deactivate()
-        sharedClient = null
-      }
-
-      const client = new Client({
-        webSocketFactory: () => new SockJS(WS_URL) as unknown as WebSocket,
-        debug: (str) => console.debug('[STOMP]', str),
-        reconnectDelay: 3000,
+      readyListeners.add(finish)
+      if (client?.active) return
+      client = new Client({
+        webSocketFactory: () => new SockJS('/api/ws/game') as unknown as WebSocket,
+        reconnectDelay: 2000,
+        heartbeatIncoming: 10000,
+        heartbeatOutgoing: 10000,
         onConnect: () => {
-          clearTimeout(timeout)
           connected.value = true
-          console.debug('[STOMP] Connected')
-
-          // Flush pending subscriptions
-          while (pendingSubscriptions.length > 0) {
-            const pending = pendingSubscriptions.shift()!
-            const sub = client.subscribe(pending.destination, (msg: IMessage) => {
-              try {
-                pending.handler(JSON.parse(msg.body))
-              } catch (e) {
-                console.error(`[STOMP] Failed to parse message from ${pending.destination}:`, e)
-              }
+          subscriptions.forEach(attach)
+          if (hasConnected) {
+            // Restore membership only for screens that are still subscribed.
+            joins.forEach((join, destination) => {
+              if ([...subscriptions].some(entry => entry.destination.includes(`/${join.roomId}/`))) {
+                client!.publish({ destination, body: JSON.stringify(join.body) })
+              } else joins.delete(destination)
             })
-            pending.resolve(() => sub.unsubscribe())
           }
-
-          resolve()
+          hasConnected = true
+          readyListeners.forEach(finish => finish())
         },
-        onStompError: (frame) => {
-          console.error('[STOMP] Error:', frame.headers['message'])
-          connected.value = false
-        },
-        onWebSocketClose: () => {
-          connected.value = false
-          console.debug('[STOMP] Disconnected')
-        }
+        onWebSocketClose: () => { connected.value = false },
+        onStompError: frame => { connected.value = false; console.error(frame.headers.message) }
       })
-
-      sharedClient = client
       client.activate()
-    }).finally(() => {
-      connectPromise = null
-    })
-
-    return connectPromise
+    }).finally(() => { connection = null })
+    return connection
   }
 
-  /**
-   * Subscribe to a STOMP destination.
-   * If not yet connected, the subscription is queued and resolved once connected.
-   */
   function subscribe<T>(destination: string, handler: MessageHandler<T>): () => void {
-    if (sharedClient?.connected) {
-      const sub = sharedClient.subscribe(destination, (msg: IMessage) => {
-        try {
-          handler(JSON.parse(msg.body) as T)
-        } catch (e) {
-          console.error(`[STOMP] Failed to parse message from ${destination}:`, e)
-        }
-      })
-      return () => sub.unsubscribe()
-    }
-
-    // Not connected yet — queue the subscription
-    console.warn(`[STOMP] Not yet connected, queuing subscription to ${destination}`)
-    let unsubFn: (() => void) | null = null
-    let unsubRequested = false
-
-    const subscribePromise = new Promise<() => void>((resolve) => {
-      pendingSubscriptions.push({
-        destination,
-        handler: handler as MessageHandler<unknown>,
-        resolve
-      })
-    }).then((unsub) => {
-      unsubFn = unsub
-      if (unsubRequested) {
-        unsub()
-      }
-    })
-
-    void subscribePromise
-
+    const entry = { destination, handler: handler as MessageHandler<unknown>, active: undefined as StompSubscription | undefined }
+    subscriptions.add(entry)
+    if (client?.connected) attach(entry)
     return () => {
-      if (unsubFn) {
-        unsubFn()
-      } else {
-        unsubRequested = true
-      }
+      if (client?.connected) entry.active?.unsubscribe()
+      subscriptions.delete(entry)
+      joins.forEach((join, destination) => {
+        if (![...subscriptions].some(item => item.destination.includes(`/${join.roomId}/`))) joins.delete(destination)
+      })
     }
   }
 
   function publish(destination: string, body: unknown): void {
-    if (!sharedClient?.connected) {
-      console.warn(`[STOMP] Not connected, cannot publish to ${destination}`)
-      return
-    }
-    sharedClient.publish({
-      destination,
-      body: JSON.stringify(body)
-    })
+    const match = destination.match(/^\/app\/(?:snake|tank|turn)\/([^/]+)\/join$/)
+    if (match) joins.set(destination, { body, roomId: match[1] })
+    // Inputs are replaceable: never buffer and replay old steering after an outage.
+    if (!client?.connected) return
+    client.publish({ destination, body: JSON.stringify(body) })
   }
 
-  function disconnect(): void {
-    if (sharedClient) {
-      void sharedClient.deactivate()
-      sharedClient = null
-      connected.value = false
-    }
+  function disconnect() {
+    void client?.deactivate()
+    client = null
+    connected.value = false
+    hasConnected = false
+    joins.clear()
   }
-
-  return {
-    connected,
-    sessionId,
-    connect,
-    subscribe,
-    publish,
-    disconnect
-  }
+  return { connected, sessionId, connect, subscribe, publish, disconnect }
 }

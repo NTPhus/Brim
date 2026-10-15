@@ -89,6 +89,7 @@ export interface CreateRoomRequest {
   hostId?: string
   hostUsername?: string
   difficulty?: 'EASY' | 'MEDIUM' | 'HARD'
+  mapId?: 'ARENA' | 'WAREHOUSE' | 'CROSSROADS'
 }
 
 export interface JoinRoomRequest {

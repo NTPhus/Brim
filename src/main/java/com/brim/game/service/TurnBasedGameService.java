@@ -16,6 +16,8 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
+import com.brim.game.runtime.BotExecutor;
+import org.springframework.scheduling.annotation.Scheduled;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -27,6 +29,9 @@ public class TurnBasedGameService {
     private final GameEventProducer eventProducer;
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
+    private final BotExecutor botExecutor;
+    private final com.brim.game.runtime.TurnBasedGameRegistry gameRegistry;
+    private final java.util.Set<String> pendingBots = ConcurrentHashMap.newKeySet();
 
     private final Map<String, TurnBasedGame> activeGames = new ConcurrentHashMap<>();
 
@@ -39,11 +44,7 @@ public class TurnBasedGameService {
 
         Object typedMove = move;
         try {
-            if (game instanceof ChessGame) {
-                typedMove = objectMapper.convertValue(move, ChessGame.ChessMove.class);
-            } else if (game instanceof ChineseChessGame) {
-                typedMove = objectMapper.convertValue(move, ChineseChessGame.ChineseChessMove.class);
-            }
+            typedMove = objectMapper.convertValue(move, game.moveType());
         } catch (IllegalArgumentException conversionError) {
             log.warn("Invalid move payload for room {}: {}", roomId, move);
             eventProducer.sendGameEvent(roomId, playerId, MessageType.ERROR, "Invalid move payload");
@@ -88,11 +89,7 @@ public class TurnBasedGameService {
         if (room.getSettings() != null && room.getSettings().getCustomSettings() != null) {
             difficulty = String.valueOf(room.getSettings().getCustomSettings().getOrDefault("difficulty", "MEDIUM"));
         }
-        TurnBasedGame game = switch (room.getGameType()) {
-            case CHESS -> new ChessGame(room.getId(), difficulty);
-            case CHINESE_CHESS -> new ChineseChessGame(room.getId(), difficulty);
-            default -> throw new IllegalArgumentException("Not a turn-based game: " + room.getGameType());
-        };
+        TurnBasedGame game = gameRegistry.create(room.getGameType(), room.getId(), difficulty);
 
         // Assign players
         var players = room.getPlayers();
@@ -124,22 +121,27 @@ public class TurnBasedGameService {
 
     private void triggerBotTurnIfNeeded(String roomId, TurnBasedGame game) {
         String current = game.getCurrentPlayerId();
-        if (current != null && current.startsWith("bot-") && !game.isGameOver()) {
-            java.util.concurrent.CompletableFuture.delayedExecutor(800, java.util.concurrent.TimeUnit.MILLISECONDS).execute(() -> {
-                try {
-                    TurnBasedGame g = activeGames.get(roomId);
-                    if (g == game && current.equals(g.getCurrentPlayerId()) && !g.isGameOver()) {
-                        Object botMove = g.generateBotMove();
-                        if (botMove != null && activeGames.get(roomId) == g
-                                && current.equals(g.getCurrentPlayerId()) && !g.isGameOver()) {
-                            processMove(roomId, current, botMove);
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error("Error executing bot move in room {}", roomId, e);
-                }
-            });
-        }
+        if (current == null || !current.startsWith("bot-") || game.isGameOver() || !pendingBots.add(roomId)) return;
+        boolean accepted = botExecutor.submit(() -> {
+            try {
+                if (activeGames.get(roomId) != game || !current.equals(game.getCurrentPlayerId()) || game.isGameOver()) return;
+                Object move = game.generateBotMove();
+                if (move != null && activeGames.get(roomId) == game
+                        && current.equals(game.getCurrentPlayerId()) && !game.isGameOver()) processMove(roomId, current, move);
+            } catch (Exception error) {
+                log.error("Bot failed in room {}", roomId, error);
+            } finally { pendingBots.remove(roomId); }
+        });
+        if (!accepted) pendingBots.remove(roomId);
+    }
+
+    // Bounded worker queue: retry busy rooms rather than enqueue unlimited searches.
+    @Scheduled(fixedDelay = 500)
+    public void resumeWaitingBots() {
+        activeGames.forEach((roomId, game) -> {
+            if (roomService.getRoom(roomId) == null) activeGames.remove(roomId, game);
+            else triggerBotTurnIfNeeded(roomId, game);
+        });
     }
 
     private void endGame(String roomId, String winnerId) {
@@ -179,6 +181,7 @@ public class TurnBasedGameService {
     }
 
     public interface TurnBasedGame {
+        Class<?> moveType();
         boolean makeMove(String playerId, Object move);
         Object getState();
         String getCurrentPlayerId();

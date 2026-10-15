@@ -5,11 +5,12 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.util.*;
+import com.brim.game.runtime.InterestArea;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** A small real-time, mouse-steered snake game inspired by Slither.io. */
 @Data
-public class SnakeGame {
+public class SnakeGame implements com.brim.game.runtime.GameSimulation<SnakeGame.SnakeGameState> {
     private static final double NORMAL_SPEED = 4.0;
     private static final double BOOST_SPEED = 6.2;
     private static final double MAX_TURN_PER_TICK = 0.20;
@@ -36,15 +37,15 @@ public class SnakeGame {
         this.tickRateMs = tickRateMs;
     }
 
-    public void addPlayer(Player player) {
+    public synchronized void addPlayer(Player player) {
         Snake snake = new Snake(player.getId(), player.getUsername(), generateSpawnPosition(), initialLength);
         if (player.getColor() != null) snake.setColor(player.getColor());
         snakes.put(player.getId(), snake);
     }
 
-    public void removePlayer(String playerId) { snakes.remove(playerId); }
+    public synchronized void removePlayer(String playerId) { snakes.remove(playerId); }
 
-    public void handleInput(String playerId, double angle, boolean boosting) {
+    public synchronized void handleInput(String playerId, double angle, boolean boosting) {
         Snake snake = snakes.get(playerId);
         if (snake != null && snake.alive && Double.isFinite(angle)) {
             snake.targetAngle = normalizeAngle(angle);
@@ -52,12 +53,12 @@ public class SnakeGame {
         }
     }
 
-    public void setColor(String playerId, String color) {
+    public synchronized void setColor(String playerId, String color) {
         Snake snake = snakes.get(playerId);
         if (snake != null && color != null && color.matches("#[0-9a-fA-F]{6}")) snake.setColor(color);
     }
 
-    public GameState update() {
+    public synchronized GameState update() {
         long now = System.currentTimeMillis();
         if (now - lastTick < tickRateMs || state != GameState.IN_PROGRESS) return state;
         lastTick = now;
@@ -97,12 +98,22 @@ public class SnakeGame {
 
         if (snake.boosting && snake.body.size() > 18 && random.nextInt(12) == 0) {
             Position tail = snake.body.get(snake.body.size() - 1);
-            food.add(new Food(tail.x, tail.y, 3.0, 1));
+            if (food.size() < 1200) food.add(new Food(tail.x, tail.y, 3.0, 1));
             snake.maxLength = Math.max(18, snake.maxLength - 1);
         }
     }
 
+    private record Segment(String owner, Position point) {}
+
     private void checkCollisionsAndFood() {
+        var bodies = new com.brim.game.runtime.SpatialIndex<Segment>(64);
+        for (Snake other : snakes.values()) {
+            if (!other.alive) continue;
+            for (int i = 0; i < other.body.size(); i += 2) {
+                Position point = other.body.get(i);
+                bodies.add(point.x, point.y, new Segment(other.playerId, point));
+            }
+        }
         for (Snake snake : snakes.values()) {
             if (!snake.alive) continue;
             Position head = snake.getHead();
@@ -111,18 +122,9 @@ public class SnakeGame {
                 continue;
             }
 
-            boolean hitBody = false;
-            for (Snake other : snakes.values()) {
-                // Like Slither.io, looping through your own body is allowed.
-                if (!other.alive || other == snake) continue;
-                for (int i = 0; i < other.body.size(); i += 2) {
-                    if (distanceSquared(head, other.body.get(i)) < HEAD_RADIUS * HEAD_RADIUS * 1.6) {
-                        hitBody = true;
-                        break;
-                    }
-                }
-                if (hitBody) break;
-            }
+            boolean hitBody = bodies.anyMatch(head.x, head.y, HEAD_RADIUS * 1.3,
+                    segment -> !segment.owner.equals(snake.playerId) && snakes.get(segment.owner).alive
+                            && distanceSquared(head, segment.point) < HEAD_RADIUS * HEAD_RADIUS * 1.6);
             if (hitBody) {
                 killSnake(snake);
                 continue;
@@ -134,7 +136,7 @@ public class SnakeGame {
                     .orElse(null);
             if (eaten != null && food.remove(eaten)) {
                 snake.score += eaten.value;
-                snake.maxLength += Math.max(1, eaten.value);
+                snake.maxLength = Math.min(512, snake.maxLength + Math.max(1, eaten.value));
             }
         }
     }
@@ -144,7 +146,7 @@ public class SnakeGame {
         snake.diedAt = System.currentTimeMillis();
         // Drop a bounded number of pellets so a very long snake cannot flood the world.
         int step = Math.max(3, snake.body.size() / 120);
-        for (int i = 0; i < snake.body.size(); i += step) {
+        for (int i = 0; i < snake.body.size() && food.size() < 1200; i += step) {
             Position p = snake.body.get(i);
             double radius = 3 + random.nextDouble() * 4;
             food.add(new Food(p.x, p.y, radius, foodValue(radius)));
@@ -169,7 +171,7 @@ public class SnakeGame {
         return Math.max(min, Math.min(max, value));
     }
 
-    public boolean respawn(String playerId) {
+    public synchronized boolean respawn(String playerId) {
         Snake snake = snakes.get(playerId);
         if (snake == null || snake.alive || System.currentTimeMillis() - snake.diedAt < 3000) return false;
         String color = snake.color;
@@ -208,8 +210,30 @@ public class SnakeGame {
         return value;
     }
 
-    public SnakeGameState getGameState() {
-        return new SnakeGameState(new HashMap<>(snakes), new HashSet<>(food), state, gridWidth, gridHeight);
+    public synchronized SnakeGameState getGameState() { return snapshot(null); }
+
+    public synchronized SnakeGameState getGameState(String viewerId) {
+        Snake viewer = snakes.get(viewerId);
+        Position center = viewer == null ? new Position(gridWidth / 2.0, gridHeight / 2.0) : viewer.getHead();
+        return snapshot(new InterestArea(center.x, center.y, 1800, 1200));
+    }
+
+    private SnakeGameState snapshot(InterestArea area) {
+        Map<String, Snake> visible = new HashMap<>();
+        for (Snake snake : snakes.values()) {
+            if (area != null && snake.body.stream().noneMatch(p -> area.contains(p.x, p.y))) continue;
+            Snake copy = new Snake(snake.playerId, snake.username, snake.getHead(), 3);
+            copy.body.clear();
+            snake.body.forEach(p -> copy.body.add(new Position(p.x, p.y)));
+            copy.color = snake.color; copy.angle = snake.angle; copy.targetAngle = snake.targetAngle;
+            copy.boosting = snake.boosting; copy.alive = snake.alive; copy.score = snake.score;
+            copy.maxLength = snake.maxLength; copy.diedAt = snake.diedAt;
+            visible.put(snake.playerId, copy);
+        }
+        Set<Food> visibleFood = new HashSet<>();
+        food.stream().filter(f -> area == null || area.contains(f.getX(), f.getY()))
+                .forEach(f -> visibleFood.add(new Food(f.getX(), f.getY(), f.radius, f.value)));
+        return new SnakeGameState(visible, visibleFood, state, gridWidth, gridHeight);
     }
 
     public enum GameState { WAITING, IN_PROGRESS, FINISHED }
@@ -275,5 +299,6 @@ public class SnakeGame {
         private final GameState state;
         private final int gridWidth;
         private final int gridHeight;
+        private final long serverTime = System.currentTimeMillis();
     }
 }

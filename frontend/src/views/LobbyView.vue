@@ -24,7 +24,8 @@ const newRoom = ref<CreateRoomRequest>({
   name: '',
   gameType: 'SNAKE',
   maxPlayers: 2,
-  difficulty: 'MEDIUM'
+  difficulty: 'MEDIUM',
+  mapId: 'ARENA'
 })
 
 const isBoardGame = computed(() => ['CHESS', 'CHINESE_CHESS'].includes(newRoom.value.gameType))
@@ -218,6 +219,15 @@ function statusLabel(status: string) {
 
         <label>Số người chơi tối đa</label>
         <input v-model.number="newRoom.maxPlayers" type="number" min="2" :max="newRoom.gameType === 'SNAKE' ? 12 : 8" :disabled="isBoardGame" />
+
+        <template v-if="newRoom.gameType === 'TANK'">
+          <label>Bản đồ Tank</label>
+          <select v-model="newRoom.mapId">
+            <option value="ARENA">Arena · Đấu trường mở</option>
+            <option value="WAREHOUSE">Warehouse · Nhà kho</option>
+            <option value="CROSSROADS">Crossroads · Giao lộ</option>
+          </select>
+        </template>
 
         <template v-if="isBoardGame">
           <label>Độ khó Bot</label>

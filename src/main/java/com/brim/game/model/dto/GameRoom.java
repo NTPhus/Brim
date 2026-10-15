@@ -15,7 +15,7 @@ public class GameRoom {
     private String name;
     private GameType gameType;
     private RoomStatus status;
-    private List<Player> players = new ArrayList<>();
+    private List<Player> players = new java.util.concurrent.CopyOnWriteArrayList<>();
     private int maxPlayers;
     private String hostId;
     private GameSettings settings;
@@ -37,12 +37,18 @@ public class GameRoom {
     }
 
     public List<Player> getPlayers() {
-        if (players == null) players = new ArrayList<>();
+        if (players == null) players = new java.util.concurrent.CopyOnWriteArrayList<>();
         return players;
     }
 
+    public void setPlayers(List<Player> players) {
+        this.players = new java.util.concurrent.CopyOnWriteArrayList<>(players == null ? List.of() : players);
+    }
+
     public boolean canJoin() {
-        return status == RoomStatus.WAITING && getPlayers().size() < maxPlayers;
+        return (status == RoomStatus.WAITING || (status == RoomStatus.IN_PROGRESS
+                && (gameType == GameType.SNAKE || gameType == GameType.TANK)))
+                && getPlayers().size() < maxPlayers;
     }
 
     @JsonIgnore

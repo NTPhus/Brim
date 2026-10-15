@@ -26,6 +26,8 @@ const selectedColor = ref(localStorage.getItem('brim_snake_color') || '#38e88f')
 const alive = ref(true)
 const diedAt = ref(0)
 const clock = ref(Date.now())
+const lastSnapshotAt = ref(Date.now())
+const networkStatus = computed(() => !stomp.connected.value ? 'Đang kết nối lại…' : clock.value - lastSnapshotAt.value > 1000 ? 'Mạng chậm · đang chờ cập nhật' : 'Đã kết nối')
 const myPlayerId = ref(session.player.id)
 const cleanupFns = ref<Array<() => void>>([])
 
@@ -157,7 +159,9 @@ onMounted(async () => {
     isConnecting.value = false
 
     // Subscribe to game state updates
-    const unsubState = stomp.subscribe(`/topic/game/${roomId}/state`, (state: SnakeGameState) => {
+    const unsubState = stomp.subscribe(`/topic/game/${roomId}/state/${session.player.id}`, (state: SnakeGameState) => {
+      if ((state.serverTime ?? 0) < (gameState.value?.serverTime ?? 0)) return
+      lastSnapshotAt.value = Date.now()
       gameState.value = state
       snakeScene?.updateGameState(state)
       if (state.state === 'IN_PROGRESS' || Object.keys(state.snakes).length > 0) {
@@ -196,6 +200,10 @@ onMounted(async () => {
       gameOverMessage.value = 'Game Over! 🐍'
     })
     cleanupFns.value.push(unsubOver)
+    cleanupFns.value.push(stomp.subscribe(`/topic/game/${roomId}/error`, (error: { message: string }) => {
+      isGameOver.value = true
+      gameOverMessage.value = error.message
+    }))
 
     // Join game
     stomp.publish(`/app/snake/${roomId}/join`, {
@@ -290,6 +298,7 @@ onUnmounted(() => {
 
 <template>
   <div class="snake-game-container">
+    <div class="network-strip" role="status">{{ networkStatus }}</div>
     <!-- Header -->
     <header class="game-header">
       <div class="header-actions">
@@ -385,6 +394,9 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.network-strip { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 1rem; font-size: .75rem; color: #bbdccb; background: #17261f; border-bottom: 1px solid #34523f; }
+.network-strip span { color: #91a89a; }
+
 .snake-game-container {
   width: 100%;
   max-width: none;

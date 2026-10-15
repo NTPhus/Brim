@@ -28,20 +28,31 @@ spring:
       path: /h2-console
 
   # Redis for session/room management
-  redis:
-    host: localhost
-    port: 6379
-    timeout: 2000ms
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      timeout: 2000ms
 
   # Kafka Configuration
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
+        enable.idempotence: true
+        acks: all
+        linger.ms: 10
+        batch.size: 32768
+        max.block.ms: 1000
+        delivery.timeout.ms: 10000
+        request.timeout.ms: 5000
         spring.json.trusted.packages: "com.brim.game.model.dto"
+    listener:
+      ack-mode: record
     consumer:
+      enable-auto-commit: false
       group-id: game-platform
       auto-offset-reset: earliest
       key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
@@ -59,18 +70,26 @@ spring:
 # Game Configuration
 game:
   snake:
-    grid-width: 4000
-    grid-height: 2400
+    grid-width: 6000
+    grid-height: 3600
     initial-length: 3
     tick-rate-ms: 50
   tank:
-    map-width: 2400
-    map-height: 1600
+    map-width: 3600
+    map-height: 2400
     tank-speed: 5
     bullet-speed: 15
     tick-rate-ms: 50
+  runtime:
+    workers: 2
+    max-rooms: 64
+  bot:
+    workers: 1
+  kafka:
+    route-moves: false
   room:
-    max-players: 4
+    max-rooms: 128
+    max-players: 16
     timeout-seconds: 300
 
 # Logging
@@ -81,3 +100,12 @@ logging:
     org.springframework.web.socket: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never

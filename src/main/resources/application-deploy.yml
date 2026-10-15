@@ -1,0 +1,14 @@
+spring:
+  h2:
+    console:
+      enabled: false
+  jpa:
+    show-sql: false
+server:
+  forward-headers-strategy: framework
+  shutdown: graceful
+logging:
+  level:
+    com.brim.game: INFO
+    org.springframework.web.socket: WARN
+    org.springframework.kafka: WARN

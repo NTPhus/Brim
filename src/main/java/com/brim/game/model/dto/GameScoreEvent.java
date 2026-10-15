@@ -1,3 +1,9 @@
 package com.brim.game.model.dto;
 
-public record GameScoreEvent(String playerId, String username, GameType gameType, int points) {}
+/** Stable event identity is retained across Kafka retries and replays. */
+public record GameScoreEvent(String eventId, String playerId, String username, GameType gameType,
+                             int points, long occurredAt) {
+    public GameScoreEvent(String playerId, String username, GameType gameType, int points) {
+        this(java.util.UUID.randomUUID().toString(), playerId, username, gameType, points, System.currentTimeMillis());
+    }
+}

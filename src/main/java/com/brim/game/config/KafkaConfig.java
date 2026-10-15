@@ -20,6 +20,25 @@ public class KafkaConfig {
     public static final String TOPIC_LEADERBOARD = "game.leaderboard";
 
     @Bean
+    public org.springframework.kafka.listener.DefaultErrorHandler kafkaErrorHandler(
+            org.springframework.kafka.core.KafkaTemplate<String, Object> template) {
+        var recoverer = new org.springframework.kafka.listener.DeadLetterPublishingRecoverer(template,
+                (record, error) -> new org.apache.kafka.common.TopicPartition(record.topic() + ".DLT", record.partition()));
+        recoverer.setFailIfSendResultIsError(true);
+        return new org.springframework.kafka.listener.DefaultErrorHandler(recoverer,
+                new org.springframework.util.backoff.FixedBackOff(1000, 2));
+    }
+
+    @Bean
+    public org.springframework.kafka.core.KafkaAdmin.NewTopics deadLetterTopics() {
+        return new org.springframework.kafka.core.KafkaAdmin.NewTopics(
+            TopicBuilder.name(TOPIC_GAME_MOVE + ".DLT").partitions(3).replicas(1).build(),
+            TopicBuilder.name(TOPIC_GAME_EVENT + ".DLT").partitions(3).replicas(1).build(),
+            TopicBuilder.name(TOPIC_TURN_BASED + ".DLT").partitions(3).replicas(1).build(),
+            TopicBuilder.name(TOPIC_LEADERBOARD + ".DLT").partitions(3).replicas(1).build());
+    }
+
+    @Bean
     public ObjectMapper kafkaObjectMapper() {
         return JsonMapper.builder()
                 .addModule(new JavaTimeModule())

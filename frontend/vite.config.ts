@@ -12,6 +12,11 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  build: {
+    rollupOptions: {
+      output: { manualChunks: { phaser: ['phaser'] } }
+    }
+  },
   server: {
     // Allow other devices on the LAN to open the dev server using this machine's IP.
     host: true,

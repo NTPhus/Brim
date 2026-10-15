@@ -39,6 +39,9 @@ public class GameEventProducer {
 
     public void sendLeaderboardScore(String roomId, GameScoreEvent score) {
         kafkaTemplate.send(KafkaConfig.TOPIC_LEADERBOARD, score.playerId(),
-                GameMessage.of(MessageType.SCORE_UPDATE, roomId, score.playerId(), score));
+                GameMessage.of(MessageType.SCORE_UPDATE, roomId, score.playerId(), score))
+                .whenComplete((result, error) -> {
+                    if (error != null) log.error("Score event delivery failed: {} room {}", score.eventId(), roomId, error);
+                });
     }
 }

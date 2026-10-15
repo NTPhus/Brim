@@ -1,3 +1,4 @@
+import { createId } from '@/utils/id'
 import Phaser from 'phaser'
 import type { TankGameState } from '@/types/gameState'
 
@@ -10,17 +11,50 @@ export class TankScene extends Phaser.Scene {
   private lastState: TankGameState | null = null
   private renderedPositions = new Map<string, { x: number; y: number; angle: number }>()
   private cameraReady = false
+  private terrain!: Phaser.GameObjects.TileSprite
+  private sprites = new Map<string, Phaser.GameObjects.Container>()
+  private projectileSprites: Phaser.GameObjects.Image[] = []
+  private previousHealth = new Map<string, number>()
+  private smoothing = .3
+
+  preload() {
+    const base = '/assets/kenney-tanks/'
+    for (const [key, file] of Object.entries({
+      hull: 'tankBeige_outline.png', turret: 'barrelBeige_outline.png',
+      terrain: 'dirt.png', projectile: 'bulletYellowSilver_outline.png', smoke: 'smokeOrange0.png'
+    })) this.load.image(`tank-${key}`, base + file)
+  }
 
   constructor() {
     super({ key: 'TankScene' })
-    this.playerId = crypto.randomUUID()
+    this.playerId = createId()
   }
 
   create() {
-    this.graphics = this.add.graphics()
+    this.terrain = this.add.tileSprite(0, 0, 1, 1, 'tank-terrain').setOrigin(0).setDepth(-10).setTint(0x737e78)
+    this.graphics = this.add.graphics().setDepth(5)
+    this.events.once('shutdown', () => {
+      this.sprites.clear(); this.renderedPositions.clear(); this.previousHealth.clear()
+      this.projectileSprites = []
+    })
   }
 
   updateGameState(state: TankGameState) {
+    for (const id of this.renderedPositions.keys()) if (!state.tanks[id]) this.renderedPositions.delete(id)
+    for (const [id, sprite] of this.sprites) {
+      if (!state.tanks[id]) { sprite.destroy(); this.sprites.delete(id); this.previousHealth.delete(id) }
+    }
+    for (const [id, tank] of Object.entries(state.tanks)) {
+      const previous = this.previousHealth.get(id)
+      if (previous !== undefined && tank.health < previous) {
+        if (id === this.playerId) this.cameras.main.shake(80, .002)
+        if (!tank.alive) {
+          const smoke = this.add.image(tank.x, tank.y, 'tank-smoke').setDepth(8).setScale(.45)
+          this.tweens.add({ targets: smoke, scale: 1.3, alpha: 0, duration: 600, onComplete: () => smoke.destroy() })
+        }
+      }
+      this.previousHealth.set(id, tank.health)
+    }
     this.lastState = state
     this.cameras.main.setBounds(0, 0, state.mapWidth, state.mapHeight)
   }
@@ -29,7 +63,8 @@ export class TankScene extends Phaser.Scene {
     this.playerId = id
   }
 
-  override update() {
+  override update(_time: number, delta: number) {
+    this.smoothing = 1 - Math.exp(-Math.min(delta, 100) / 45)
     if (!this.lastState) return
     this.graphics.clear()
     this.updateCamera(this.lastState)
@@ -41,16 +76,14 @@ export class TankScene extends Phaser.Scene {
   }
 
   private drawBackground() {
-    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 120, 120)
-    this.graphics.fillStyle(0x090f1f, 1)
-    this.graphics.fillRect(view.x, view.y, view.width, view.height)
-    this.graphics.lineStyle(1, 0x17243d, .5)
-    for (let x = Math.floor(view.x / 100) * 100; x <= view.right; x += 100) this.graphics.lineBetween(x, view.y, x, view.bottom)
-    for (let y = Math.floor(view.y / 100) * 100; y <= view.bottom; y += 100) this.graphics.lineBetween(view.x, y, view.right, y)
+    const view = this.cameras.main.worldView
+    this.terrain.setPosition(view.x, view.y).setSize(view.width + 2, view.height + 2)
+    this.terrain.tilePositionX = view.x
+    this.terrain.tilePositionY = view.y
   }
 
   private drawWalls(state: TankGameState) {
-    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 80, 80)
+    const view = Phaser.Geom.Rectangle.Inflate(Phaser.Geom.Rectangle.Clone(this.cameras.main.worldView), 80, 80)
     for (const wall of state.walls) {
       if (!Phaser.Geom.Rectangle.Overlaps(view, new Phaser.Geom.Rectangle(wall.x, wall.y, wall.width, wall.height))) continue
       this.graphics.fillStyle(0x050811, .35)
@@ -67,58 +100,37 @@ export class TankScene extends Phaser.Scene {
   }
 
   private drawTanks(state: TankGameState) {
-    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 100, 100)
-    let colorIdx = 0
+    const cameraView = this.cameras.main.worldView
+    const view = new Phaser.Geom.Rectangle(cameraView.x - 100, cameraView.y - 100, cameraView.width + 200, cameraView.height + 200)
     for (const [id, tank] of Object.entries(state.tanks)) {
       const isMe = id === this.playerId
-      if (!view.contains(tank.x, tank.y) && tank.alive) continue
-      const color = tank.color && /^#[0-9a-fA-F]{6}$/.test(tank.color)
-        ? parseInt(tank.color.slice(1), 16)
-        : (isMe ? 0x2ecc71 : parseInt(TANK_COLORS[colorIdx % TANK_COLORS.length].slice(1), 16))
-      colorIdx++
-
-      if (!tank.alive) {
-        this.graphics.fillStyle(0x555555, 0.3)
-      } else {
-        this.graphics.fillStyle(color, 1)
-      }
-
+      const color = /^#[0-9a-fA-F]{6}$/.test(tank.color ?? '') ? parseInt((tank.color ?? '#8fa88a').slice(1), 16) : 0x8fa88a
       let rendered = this.renderedPositions.get(id) ?? { x: tank.x, y: tank.y, angle: tank.angle }
       if (Phaser.Math.Distance.Between(rendered.x, rendered.y, tank.x, tank.y) > 350) {
         rendered = { x: tank.x, y: tank.y, angle: tank.angle }
       }
-      rendered.x = Phaser.Math.Linear(rendered.x, tank.x, .35)
-      rendered.y = Phaser.Math.Linear(rendered.y, tank.y, .35)
-      rendered.angle = Phaser.Math.Angle.RotateTo(rendered.angle, tank.angle, .12)
+      rendered.x = Phaser.Math.Linear(rendered.x, tank.x, this.smoothing)
+      rendered.y = Phaser.Math.Linear(rendered.y, tank.y, this.smoothing)
+      rendered.angle += Phaser.Math.Angle.Wrap(tank.angle - rendered.angle) * this.smoothing
       this.renderedPositions.set(id, rendered)
-
-      this.graphics.save()
-      this.graphics.translateCanvas(rendered.x, rendered.y)
-      this.graphics.rotateCanvas(rendered.angle)
-      // Tracks and armored body.
-      this.graphics.fillStyle(0x111827, tank.alive ? 1 : .35)
-      this.graphics.fillRoundedRect(-TANK_SIZE / 2, -TANK_SIZE / 2 - 4, TANK_SIZE, 7, 3)
-      this.graphics.fillRoundedRect(-TANK_SIZE / 2, TANK_SIZE / 2 - 3, TANK_SIZE, 7, 3)
-      this.graphics.fillStyle(color, tank.alive ? 1 : .3)
-      this.graphics.fillRoundedRect(-TANK_SIZE / 2 + 2, -TANK_SIZE / 2, TANK_SIZE - 4, TANK_SIZE, 6)
-      this.graphics.fillStyle(0x0f172a, .35)
-      this.graphics.fillCircle(0, 0, 8)
-      // Turret and barrel.
-      this.graphics.fillStyle(isMe ? 0x27ae60 : color, 1)
-      this.graphics.fillRoundedRect(0, -3.5, TANK_SIZE * 0.92, 7, 3)
-      this.graphics.fillCircle(0, 0, 7)
-      this.graphics.restore()
-
-      if (tank.alive) {
-        this.graphics.fillStyle(0x050811, .8)
-        this.graphics.fillRoundedRect(rendered.x - 18, rendered.y - 25, 36, 5, 2)
-        this.graphics.fillStyle(tank.health > 30 ? 0x4ade80 : 0xfb7185, 1)
-        this.graphics.fillRoundedRect(rendered.x - 18, rendered.y - 25, 36 * tank.health / 100, 5, 2)
-        if (isMe) {
-          this.graphics.lineStyle(2, 0x67e8f9, .8)
-          this.graphics.strokeCircle(rendered.x, rendered.y, 22)
-        }
+      let sprite = this.sprites.get(id)
+      if (!sprite) {
+        const shadow = this.add.image(4, 4, 'tank-hull').setDisplaySize(36, 40).setTint(0x000000).setAlpha(.3)
+        const hull = this.add.image(0, 0, 'tank-hull').setDisplaySize(36, 40)
+        const turret = this.add.image(0, 1, 'tank-turret').setOrigin(.5, 1).setDisplaySize(11, 30)
+        sprite = this.add.container(rendered.x, rendered.y, [shadow, hull, turret]).setDepth(2)
+        this.sprites.set(id, sprite)
       }
+      sprite.setPosition(rendered.x, rendered.y).setRotation(rendered.angle + Math.PI / 2)
+        .setAlpha(tank.alive ? 1 : .28).setVisible(view.contains(rendered.x, rendered.y))
+      ;(sprite.getAt(1) as Phaser.GameObjects.Image).setTint(color)
+      ;(sprite.getAt(2) as Phaser.GameObjects.Image).setTint(color)
+      if (!tank.alive || !sprite.visible) continue
+      this.graphics.fillStyle(0x101a16, .9).fillRoundedRect(rendered.x - 21, rendered.y - 34, 42, 6, 3)
+      this.graphics.fillStyle(tank.health > 30 ? 0x84e6a5 : 0xff8071)
+        .fillRoundedRect(rendered.x - 20, rendered.y - 33, 40 * Math.max(0, tank.health) / 100, 4, 2)
+      if ((tank.shieldUntil ?? 0) > Date.now()) this.graphics.lineStyle(3, 0x7cd9fa, .8).strokeCircle(rendered.x, rendered.y, 30)
+      if (isMe) this.graphics.lineStyle(2, 0xc4f7e5, .8).strokeCircle(rendered.x, rendered.y, 26)
     }
   }
 
@@ -127,7 +139,7 @@ export class TankScene extends Phaser.Scene {
     if (!tank) return
     const rendered = this.renderedPositions.get(this.playerId) ?? tank
     const camera = this.cameras.main
-    camera.setZoom(Phaser.Math.Linear(camera.zoom, 1, .04))
+    camera.setZoom(Phaser.Math.Linear(camera.zoom, Math.max(1, this.scale.width / 2200, this.scale.height / 1400), .04))
     const snap = !this.cameraReady || Phaser.Math.Distance.Between(rendered.x, rendered.y, tank.x, tank.y) > 350
     if (snap) {
       camera.centerOn(tank.x, tank.y)
@@ -141,27 +153,38 @@ export class TankScene extends Phaser.Scene {
   }
 
   private drawBullets(state: TankGameState) {
-    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 60, 60)
-    for (const bullet of state.bullets) {
-      if (!view.contains(bullet.x, bullet.y)) continue
-      this.graphics.fillStyle(0xfbbf24, .2)
-      this.graphics.fillCircle(bullet.x, bullet.y, 9)
-      this.graphics.fillStyle(0xfff1a8, 1)
-      this.graphics.fillCircle(bullet.x, bullet.y, 4)
-    }
+    state.bullets.forEach((bullet, index) => {
+      let sprite = this.projectileSprites[index]
+      if (!sprite) {
+        sprite = this.add.image(0, 0, 'tank-projectile').setDisplaySize(8, 14).setDepth(3)
+        this.projectileSprites.push(sprite)
+      }
+      sprite.setPosition(bullet.x, bullet.y).setRotation(bullet.angle + Math.PI / 2).setVisible(true)
+    })
+    for (let index = state.bullets.length; index < this.projectileSprites.length; index++) this.projectileSprites[index].setVisible(false)
   }
 
   private drawHealthPacks(state: TankGameState) {
-    const view = Phaser.Geom.Rectangle.Inflate(this.cameras.main.worldView, 60, 60)
+    const view = Phaser.Geom.Rectangle.Inflate(Phaser.Geom.Rectangle.Clone(this.cameras.main.worldView), 60, 60)
     for (const item of state.healthPacks ?? []) {
       if (!view.contains(item.x, item.y)) continue
-      this.graphics.fillStyle(0x22c55e, .18)
-      this.graphics.fillCircle(item.x, item.y, item.radius * 1.8)
-      this.graphics.fillStyle(0x16a34a, 1)
-      this.graphics.fillCircle(item.x, item.y, item.radius)
-      this.graphics.fillStyle(0xffffff, 1)
-      this.graphics.fillRect(item.x - 3, item.y - 8, 6, 16)
-      this.graphics.fillRect(item.x - 8, item.y - 3, 16, 6)
+      const type = item.type ?? 'HEALTH'
+      const color = { HEALTH: 0x4ade80, SHIELD: 0x67d8ff, SPEED: 0xfcd56b, RAPID_FIRE: 0xd8a1ff }[type]
+      this.graphics.fillStyle(color, .18).fillCircle(item.x, item.y, item.radius * 1.8)
+      this.graphics.fillStyle(0x162622).fillRoundedRect(item.x - 13, item.y - 13, 26, 26, 6)
+      this.graphics.lineStyle(2, color).strokeRoundedRect(item.x - 13, item.y - 13, 26, 26, 6)
+      this.graphics.fillStyle(color)
+      if (type === 'HEALTH') {
+        this.graphics.fillRect(item.x - 3, item.y - 8, 6, 16).fillRect(item.x - 8, item.y - 3, 16, 6)
+      } else if (type === 'SHIELD') {
+        this.graphics.lineStyle(3, color).strokeCircle(item.x, item.y, 7)
+      } else {
+        this.graphics.lineStyle(3, color)
+        for (const offset of [-4, 3]) {
+          this.graphics.lineBetween(item.x + offset - 3, item.y - 7, item.x + offset + 3, item.y)
+          this.graphics.lineBetween(item.x + offset + 3, item.y, item.x + offset - 3, item.y + 7)
+        }
+      }
     }
   }
 }

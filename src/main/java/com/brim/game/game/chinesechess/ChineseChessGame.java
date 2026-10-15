@@ -26,6 +26,8 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
         this.difficulty = difficulty == null ? "MEDIUM" : difficulty.toUpperCase();
     }
 
+    @Override public Class<?> moveType() { return ChineseChessMove.class; }
+
     @Override
     public synchronized boolean makeMove(String playerId, Object move) {
         if (isGameOver() || !Objects.equals(playerId, currentPlayer)) return false;

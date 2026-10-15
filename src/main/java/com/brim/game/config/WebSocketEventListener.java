@@ -37,7 +37,11 @@ public class WebSocketEventListener {
     // Key: STOMP session ID, Value: list of (roomId, playerId) pairs
     private static final Map<String, PlayerRoomBinding> sessionBindings = new ConcurrentHashMap<>();
 
+    private record PendingLeave(String roomId, String playerId, long expiresAt) {}
+    private static final Map<String, PendingLeave> pendingLeaves = new ConcurrentHashMap<>();
+
     public static void bindSession(String stompSessionId, String roomId, String playerId) {
+        pendingLeaves.remove(roomId + ":" + playerId);
         sessionBindings.put(stompSessionId, new PlayerRoomBinding(roomId, playerId));
         log.info("Bound session {} to room {} player {}", stompSessionId, roomId, playerId);
     }
@@ -67,22 +71,22 @@ public class WebSocketEventListener {
         // Don't remove bots on disconnect
         if (playerId.startsWith("bot-")) return;
 
-        GameRoom room = roomService.getRoom(roomId);
-        if (room == null) return;
-
-        boolean removed = roomService.leaveRoom(roomId, playerId);
-        if (removed) {
-            // Re-fetch the room after removal
-            GameRoom updatedRoom = roomService.getRoom(roomId);
-            if (updatedRoom != null) {
-                // Broadcast updated room state to remaining players
-                messagingTemplate.convertAndSend("/topic/room/" + roomId + "/state", updatedRoom);
-                log.info("Removed disconnected player {} from room {}, {} players remaining",
-                        playerId, roomId, updatedRoom.getPlayers().size());
-            } else {
-                log.info("Room {} deleted after last player {} disconnected", roomId, playerId);
-            }
+        // A temporary network outage must not immediately destroy the player's seat.
+        if (sessionBindings.values().stream().noneMatch(b -> b.roomId.equals(roomId) && b.playerId.equals(playerId))) {
+            pendingLeaves.put(roomId + ":" + playerId, new PendingLeave(roomId, playerId, System.currentTimeMillis() + 30_000));
         }
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 5000)
+    public void expireDisconnectedPlayers() {
+        long now = System.currentTimeMillis();
+        pendingLeaves.forEach((key, leave) -> {
+            if (leave.expiresAt > now || !pendingLeaves.remove(key, leave)) return;
+            if (sessionBindings.values().stream().anyMatch(b -> b.roomId.equals(leave.roomId) && b.playerId.equals(leave.playerId))) return;
+            roomService.leaveRoom(leave.roomId, leave.playerId);
+            GameRoom room = roomService.getRoom(leave.roomId);
+            if (room != null) messagingTemplate.convertAndSend("/topic/room/" + leave.roomId + "/state", room);
+        });
     }
 
     private record PlayerRoomBinding(String roomId, String playerId) {}
