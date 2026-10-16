@@ -48,9 +48,15 @@ class ChineseChessBotTest {
                 piece(PieceType.CANNON, PieceColor.BLACK, 4, 2), piece(PieceType.SOLDIER, PieceColor.RED, 4, 6),
                 piece(PieceType.CHARIOT, PieceColor.RED, 0, 8));
         assertTrue(state(g).isCheck());
+        assertFalse(state(g).isCheckmate());
         assertFalse(has(g, 0, 8, 0, 7));
         assertTrue(has(g, 0, 8, 4, 8)); // Adding a second screen breaks the cannon attack.
         assertTrue(has(g, 4, 9, 5, 9));
+        assertFalse(g.makeMove("red", new ChineseChessMove(0, 8, 0, 7)), "Cannot ignore cannon check");
+        assertTrue(g.makeMove("red", new ChineseChessMove(0, 8, 4, 8)));
+        assertFalse(state(g).isCheck());
+        assertFalse(state(g).isCheckmate());
+        assertFalse(g.isGameOver());
     }
     @Test void blockedHorseDoesNotGiveCheck() {
         ChineseChessGame g = game("MEDIUM");
@@ -66,6 +72,7 @@ class ChineseChessBotTest {
         assertTrue(g.makeMove("red", new ChineseChessMove(5, 3, 5, 1)));
         assertFalse(state(g).isCheck());
         assertEquals(GameStatus.FINISHED, g.getStatus());
+        assertFalse(state(g).isCheckmate(), "No legal moves without check is a loss, not checkmate");
         assertEquals("red", g.getWinner());
         assertTrue(state(g).getLegalMoves().isEmpty());
     }
@@ -82,6 +89,24 @@ class ChineseChessBotTest {
         assertEquals("red", g.getWinner());
         assertFalse(g.getBoard().isGeneralCaptured(PieceColor.BLACK));
         assertFalse(g.makeMove("black", new ChineseChessMove(4, 0, 3, 0)));
+    }
+    @Test void checkmateKeepsGeneralOnBoardAndRejectsFurtherMoves() {
+        ChineseChessGame g = game("MEDIUM");
+        setup(g, piece(PieceType.GENERAL, PieceColor.RED, 4, 9), piece(PieceType.GENERAL, PieceColor.BLACK, 3, 0),
+                piece(PieceType.CHARIOT, PieceColor.RED, 4, 1), piece(PieceType.CHARIOT, PieceColor.RED, 0, 2));
+        assertFalse(state(g).isCheck());
+        assertTrue(g.makeMove("red", new ChineseChessMove(0, 2, 3, 2)));
+        ChineseChessGameState result = state(g);
+        assertTrue(result.isCheck());
+        assertTrue(result.isCheckmate());
+        assertTrue(new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(result).path("checkmate").asBoolean());
+        assertEquals(GameStatus.FINISHED, result.getStatus());
+        assertEquals("red", result.getWinner());
+        assertEquals("black", result.getCurrentPlayer());
+        assertTrue(result.getLegalMoves().isEmpty());
+        assertFalse(g.getBoard().isGeneralCaptured(PieceColor.BLACK));
+        assertFalse(g.makeMove("black", new ChineseChessMove(3, 0, 4, 0)));
+        assertNull(g.generateBotMove());
     }
     @Test void mediumBotAvoidsLosingChariotForSoldier() {
         ChineseChessGame g = game("MEDIUM");

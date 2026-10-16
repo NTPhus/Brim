@@ -50,6 +50,8 @@ class ChessBotTest {
         assertTrue(g.isGameOver());
         assertEquals("black", g.getWinner());
         assertTrue(state(g).isCheck());
+        assertTrue(state(g).isCheckmate());
+        assertTrue(new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(state(g)).path("checkmate").asBoolean());
         assertTrue(state(g).getLegalMoves().isEmpty());
         assertFalse(g.makeMove("white", new ChessMove(0, 1, 0, 2)));
         assertNull(g.generateBotMove());
@@ -63,6 +65,26 @@ class ChessBotTest {
         assertEquals(GameStatus.DRAW, g.getStatus());
         assertNull(g.getWinner());
         assertFalse(state(g).isCheck());
+        assertFalse(state(g).isCheckmate());
+    }
+    @Test void checkMustBeAnsweredAndClearsAfterBlocking() {
+        ChessGame g = game("MEDIUM");
+        assertFalse(state(g).isCheck());
+        assertFalse(state(g).isCheckmate());
+        assertTrue(g.makeMove("white", new ChessMove(4, 1, 4, 3)));
+        assertTrue(g.makeMove("black", new ChessMove(5, 6, 5, 4)));
+        assertTrue(g.makeMove("white", new ChessMove(3, 0, 7, 4)));
+        ChessGameState checked = state(g);
+        assertTrue(checked.isCheck());
+        assertFalse(checked.isCheckmate());
+        assertEquals("black", checked.getCurrentPlayer());
+        assertEquals(GameStatus.IN_PROGRESS, checked.getStatus());
+        assertFalse(checked.getLegalMoves().isEmpty());
+        assertFalse(g.makeMove("black", new ChessMove(0, 6, 0, 5)), "Cannot ignore check");
+        assertTrue(g.makeMove("black", new ChessMove(6, 6, 6, 5)), "Pawn can block the queen's check");
+        assertFalse(state(g).isCheck());
+        assertFalse(state(g).isCheckmate());
+        assertFalse(g.isGameOver());
     }
     @Test void castlesMoveRookAndKingAndRejectAttackedTransit() {
         ChessGame g = game("HARD");

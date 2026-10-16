@@ -539,6 +539,10 @@ public class ChessGame implements TurnBasedGameService.TurnBasedGame {
         private final ChessMove lastMove;
         private final boolean check;
 
+        public boolean isCheckmate() {
+            return status == GameStatus.FINISHED && check;
+        }
+
         public ChessGameState(Map<String, ChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String whitePlayer, String blackPlayer, String winner, List<ChessMove> legalMoves, ChessMove lastMove, boolean check) {
             this.pieces = pieces;
             this.currentPlayer = currentPlayer;

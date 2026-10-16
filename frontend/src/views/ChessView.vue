@@ -20,7 +20,7 @@ const roomInfo = ref<GameRoom | null>(null)
 const selectedCell = ref<{ x: number; y: number } | null>(null)
 const error = ref<string | null>(null)
 const isGameOver = ref(false)
-const gameOverMessage = ref('')
+const showResult = ref(true)
 const cleanupFns = ref<Array<() => void>>([])
 
 const PIECE_SYMBOLS: Record<string, string> = {
@@ -56,6 +56,32 @@ const isCheck = computed(() => {
   if (!gameState.value) return false
   return gameState.value.check ?? false
 })
+const isCheckmate = computed(() => gameState.value?.checkmate
+  ?? (gameState.value?.status === 'FINISHED' && isCheck.value))
+const checkedColor = computed(() => {
+  const state = gameState.value
+  if (!state || !isCheck.value) return null
+  return state.currentPlayer === state.whitePlayer ? 'WHITE' : 'BLACK'
+})
+const checkedKingSquare = computed(() => {
+  const king = Object.values(pieceAt.value).find(piece => piece.type === 'KING' && piece.color === checkedColor.value)
+  return king ? `${king.x},${king.y}` : null
+})
+const checkMessage = computed(() => {
+  const side = checkedColor.value === 'WHITE' ? 'Trắng' : 'Đen'
+  if (isCheckmate.value) return `Chiếu hết! Vua ${side} không còn nước thoát.`
+  return isMyTurn.value
+    ? 'Bạn đang bị chiếu! Hãy di chuyển vua, che chắn hoặc bắt quân đang chiếu.'
+    : `Bạn đang chiếu vua ${side}. Đối thủ phải hóa giải nước chiếu.`
+})
+const gameOverMessage = computed(() => {
+  const state = gameState.value
+  if (state?.status === 'DRAW') return 'Hòa cờ — hết nước đi hợp lệ nhưng vua không bị chiếu.'
+  if (!state?.winner) return 'Ván cờ kết thúc!'
+  if (state.winner === myPlayerId) return 'Bạn đã thắng! 🏆'
+  const name = roomInfo.value?.players.find(p => p.id === state.winner)?.username ?? 'Đối thủ'
+  return `${name} đã thắng. Bạn đã thua ván này.`
+})
 const lastMove = computed(() => gameState.value?.lastMove ?? null)
 const historyRows = computed(() => {
   const moves = gameState.value?.moveHistory ?? []
@@ -77,10 +103,18 @@ watch(() => gameState.value?.currentPlayer, () => {
   selectedCell.value = null
 })
 
+watch(() => gameState.value?.status, () => {
+  showResult.value = true
+  selectedCell.value = null
+})
+
 const STATUS_TEXT = computed(() => {
   if (!gameState.value) return 'Đang kết nối...'
-  if (isGameOver.value || gameState.value.status === 'FINISHED') return '🎉 Trò chơi kết thúc!'
+  if (isCheckmate.value) return '♚ Chiếu hết — Checkmate!'
+  if (gameState.value.status === 'DRAW') return '🤝 Hòa cờ — Stalemate'
+  if (isGameOver.value || gameState.value.status === 'FINISHED') return 'Ván cờ kết thúc!'
   if (isMyTurn.value) return isCheck.value ? '⚠️ Chiếu tướng! Đến lượt bạn' : '🎯 Đến lượt bạn'
+  if (isCheck.value) return '♔ Bạn đang chiếu tướng!'
   return '⏳ Đợi đối thủ đi nước...'
 })
 
@@ -100,6 +134,7 @@ function formatMove(raw?: string): string {
 }
 
 function onCellClick(x: number, y: number) {
+  if (!isMyTurn.value || isGameOver.value || gameState.value?.status !== 'IN_PROGRESS') return
   error.value = null
   const piece = pieceAt.value[`${x},${y}`]
 
@@ -149,7 +184,6 @@ function onCellClick(x: number, y: number) {
 }
 
 function handleRestart() {
-  isGameOver.value = false
   selectedCell.value = null
   error.value = null
   stomp.publish(`/app/turn/${roomId}/restart`, {
@@ -166,7 +200,6 @@ onMounted(async () => {
     roomInfo.value = room
     if (room.status === 'FINISHED') {
       isGameOver.value = true
-      gameOverMessage.value = 'Trận đấu này đã kết thúc!'
     }
   } catch (e) {
     console.warn('[ChessView] Fetch room error:', e)
@@ -178,16 +211,8 @@ onMounted(async () => {
     cleanupFns.value.push(
       stomp.subscribe(`/topic/game/${roomId}/state`, (state: ChessGameState) => {
         gameState.value = state
-        if (state.status === 'FINISHED') {
-          isGameOver.value = true
-          gameOverMessage.value = state.winner
-            ? (state.winner === myPlayerId
-                ? 'Chúc mừng! Bạn đã thắng! 🏆'
-                : `${roomInfo.value?.players.find(p => p.id === state.winner)?.username ?? state.winner} đã thắng! 🏆`)
-            : 'Trận đấu kết thúc hòa!'
-        } else {
-          isGameOver.value = false
-        }
+        isGameOver.value = state.status !== 'IN_PROGRESS'
+        error.value = null
       })
     )
 
@@ -201,9 +226,9 @@ onMounted(async () => {
     )
 
     cleanupFns.value.push(
-      stomp.subscribe(`/topic/game/${roomId}/over`, (msg: any) => {
+      stomp.subscribe(`/topic/game/${roomId}/over`, (msg: { payload?: { finalState?: ChessGameState } }) => {
+        if (msg.payload?.finalState) gameState.value = msg.payload.finalState
         isGameOver.value = true
-        gameOverMessage.value = msg?.payload?.winner === myPlayerId ? 'Chúc mừng! Bạn đã thắng! 🏆' : 'Trò chơi kết thúc!'
       })
     )
 
@@ -261,13 +286,22 @@ async function handleGoToLobby() {
   <div class="chess-game">
     <div class="game-header">
       <button class="secondary" @click="handleGoToLobby">← Về sảnh</button>
-      <div class="status-text" :class="{ mine: isMyTurn, check: isCheck }">{{ STATUS_TEXT }}</div>
+      <div class="status-text" :class="{ mine: isMyTurn && !isGameOver, check: isCheck }" role="status" aria-live="polite">{{ STATUS_TEXT }}</div>
       <div class="color-badge" v-if="myColor">
         Bạn là quân: <strong>{{ myColor === 'WHITE' ? 'Trắng ⚪' : 'Đen ⚫' }}</strong>
       </div>
     </div>
 
     <div v-if="error" class="error-msg">⚠️ {{ error }}</div>
+
+    <div v-if="isCheck" class="check-banner" :class="{ checkmate: isCheckmate }" role="status" aria-live="polite">
+      <span class="check-icon" aria-hidden="true">{{ isCheckmate ? '♚' : '⚠' }}</span>
+      <div>
+        <strong>{{ isCheckmate ? 'CHIẾU HẾT · CHECKMATE' : 'CHIẾU TƯỚNG · CHECK' }}</strong>
+        <p>{{ checkMessage }}</p>
+      </div>
+    </div>
+    <button v-if="isGameOver && !showResult" class="btn-secondary" @click="showResult = true">Xem kết quả</button>
 
     <div class="board-wrapper">
       <div class="board-container">
@@ -285,8 +319,11 @@ async function handleGoToLobby() {
                 'last-from': lastMove?.fromX === col - 1 && lastMove?.fromY === boardY(row),
                 'last-to': lastMove?.toX === col - 1 && lastMove?.toY === boardY(row),
                 'legal-target': legalTargets.has(`${col - 1},${boardY(row)}`),
+                'king-in-check': checkedKingSquare === `${col - 1},${boardY(row)}`,
+                'king-checkmated': isCheckmate && checkedKingSquare === `${col - 1},${boardY(row)}`,
                 capture: legalTargets.has(`${col - 1},${boardY(row)}`) && !!pieceAt[`${col - 1},${boardY(row)}`]
               }]"
+              :title="checkedKingSquare === `${col - 1},${boardY(row)}` ? (isCheckmate ? 'Vua bị chiếu hết' : 'Vua đang bị chiếu') : undefined"
               @click="onCellClick(col - 1, boardY(row))"
             >
               <span
@@ -296,6 +333,7 @@ async function handleGoToLobby() {
               >
                 {{ PIECE_SYMBOLS[pieceKey(pieceAt[`${col - 1},${boardY(row)}`]!)] }}
               </span>
+              <span v-if="checkedKingSquare === `${col - 1},${boardY(row)}`" class="king-danger" aria-hidden="true">!</span>
               <span v-if="selectedCell?.x === col - 1 && selectedCell?.y === boardY(row)" class="selected-ring" />
               <span v-else-if="legalTargets.has(`${col - 1},${boardY(row)}`)" class="move-preview" />
             </div>
@@ -316,16 +354,15 @@ async function handleGoToLobby() {
           💡 Nhấp vào quân của bạn để chọn, sau đó nhấp vào ô muốn đi
         </div>
 
-        <div v-if="isCheck" class="check-warning">
-          ⚠️ Chiếu tướng! Hãy cẩn thận nước đi tiếp theo
-        </div>
       </div>
 
       <!-- Game Over Modal Overlay -->
-      <div v-if="isGameOver" class="modal-overlay">
-        <div class="modal-content">
-          <h3>{{ gameOverMessage || 'Ván cờ kết thúc!' }}</h3>
+      <div v-if="isGameOver && showResult" class="modal-overlay">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="chess-result-title" aria-describedby="chess-result-detail">
+          <h3 id="chess-result-title">{{ isCheckmate ? '♚ Chiếu hết — Checkmate!' : gameState?.status === 'DRAW' ? '🤝 Hòa cờ' : 'Ván cờ kết thúc' }}</h3>
+          <p id="chess-result-detail">{{ gameOverMessage }}</p>
           <div class="modal-actions">
+            <button class="btn-secondary" autofocus @click="showResult = false">Xem bàn cờ</button>
             <button class="btn-primary" @click="handleRestart">🎮 Chơi lại</button>
             <button class="btn-secondary" @click="router.push(`/room/${roomId}`)">🏠 Phòng chờ</button>
             <button class="btn-secondary" @click="handleGoToLobby">📋 Về sảnh</button>
@@ -500,11 +537,64 @@ async function handleGoToLobby() {
   font-size: 0.85rem;
 }
 
-.check-warning {
-  margin-top: 0.8rem;
-  color: var(--danger);
-  font-weight: 600;
-  animation: pulse 1.5s infinite;
+.check-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.85rem 1rem;
+  border: 1px solid #f87171;
+  border-left: 5px solid #ef4444;
+  border-radius: 12px;
+  background: #3b1922;
+  color: #fecaca;
+}
+
+.check-banner strong { letter-spacing: 0.06em; }
+.check-banner p { margin: 0.3rem 0 0; font-size: 0.9rem; }
+.check-icon { font-size: 2rem; }
+.check-banner.checkmate { background: #4c1525; border-color: #fb7185; }
+
+.board-row > div.king-in-check {
+  background: radial-gradient(circle, #ff8989 0%, #dc2626 100%) !important;
+  box-shadow: inset 0 0 0 3px #fecaca;
+}
+
+.king-in-check::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 3px solid #fff1f2;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: king-check-pulse 1.2s ease-out 3;
+}
+
+.board-row > div.king-checkmated { box-shadow: inset 0 0 0 4px #fda4af; }
+.king-danger {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #881337;
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+@keyframes king-check-pulse {
+  from { transform: scale(0.65); opacity: 1; }
+  to { transform: scale(1.1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .king-in-check::after { animation: none; }
 }
 
 .modal-overlay {
@@ -537,6 +627,8 @@ async function handleGoToLobby() {
   color: #e94560;
   font-size: 1.3rem;
 }
+
+.modal-content p { color: #e2e8f0; line-height: 1.5; margin: 0 0 1.5rem; }
 
 .modal-actions {
   display: flex;

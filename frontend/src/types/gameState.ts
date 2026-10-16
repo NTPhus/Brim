@@ -120,6 +120,7 @@ export interface ChessGameState {
   blackPlayer?: string | null
   winner?: string | null
   check?: boolean
+  checkmate?: boolean
   legalMoves: ChessMove[]
   lastMove?: ChessMove | null
 }
@@ -154,6 +155,7 @@ export interface XiangqiGameState {
   blackPlayer?: string | null
   winner?: string | null
   check?: boolean
+  checkmate?: boolean
   legalMoves: XiangqiMove[]
   lastMove?: XiangqiMove | null
 }

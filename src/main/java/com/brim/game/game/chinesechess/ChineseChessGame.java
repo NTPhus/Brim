@@ -3,6 +3,7 @@ package com.brim.game.game.chinesechess;
 import com.brim.game.service.TurnBasedGameService;
 import com.brim.game.game.ai.AlphaBetaSearch;
 import lombok.Data;
+import com.brim.game.model.dto.MessageType;
 
 import java.util.*;
 
@@ -82,7 +83,7 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
     }
 
     @Override
-    public void handleEvent(com.brim.game.model.dto.MessageType type, Object payload) {
+    public void handleEvent(MessageType type, Object payload) {
     }
 
     @Override
@@ -519,6 +520,10 @@ public class ChineseChessGame implements TurnBasedGameService.TurnBasedGame {
         private final List<ChineseChessMove> legalMoves;
         private final ChineseChessMove lastMove;
         private final boolean check;
+
+        public boolean isCheckmate() {
+            return status == GameStatus.FINISHED && check;
+        }
 
         public ChineseChessGameState(Map<String, ChineseChessPiece> pieces, String currentPlayer, GameStatus status, List<String> moveHistory, String redPlayer, String blackPlayer, String winner, List<ChineseChessMove> legalMoves, ChineseChessMove lastMove, boolean check) {
             this.pieces = pieces;
