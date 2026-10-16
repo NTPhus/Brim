@@ -1,3 +1,4 @@
+import { csrfHeaders, refreshCsrf } from '@/api/session'
 import { createId } from '@/utils/id'
 import { Client, IMessage, StompSubscription } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
@@ -34,6 +35,10 @@ export function useStompClient() {
       if (client?.active) return
       client = new Client({
         webSocketFactory: () => new SockJS('/api/ws/game') as unknown as WebSocket,
+        beforeConnect: async () => {
+          await refreshCsrf()
+          client!.connectHeaders = await csrfHeaders()
+        },
         reconnectDelay: 2000,
         heartbeatIncoming: 10000,
         heartbeatOutgoing: 10000,
@@ -52,7 +57,12 @@ export function useStompClient() {
           readyListeners.forEach(finish => finish())
         },
         onWebSocketClose: () => { connected.value = false },
-        onStompError: frame => { connected.value = false; console.error(frame.headers.message) }
+        onStompError: frame => {
+          connected.value = false
+          console.error(frame.headers.message)
+          void client?.deactivate()
+          window.dispatchEvent(new Event('brim-session-expired'))
+        }
       })
       client.activate()
     }).finally(() => { connection = null })
@@ -80,8 +90,8 @@ export function useStompClient() {
     client.publish({ destination, body: JSON.stringify(body) })
   }
 
-  function disconnect() {
-    void client?.deactivate()
+  async function disconnect() {
+    await client?.deactivate()
     client = null
     connected.value = false
     hasConnected = false

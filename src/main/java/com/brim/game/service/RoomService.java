@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RoomService {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final org.springframework.context.ApplicationEventPublisher events;
     @org.springframework.beans.factory.annotation.Value("${game.room.max-rooms:128}")
     private int maxRooms = 128;
     private final Map<String, GameRoom> localRooms = new ConcurrentHashMap<>();
@@ -98,17 +99,31 @@ public class RoomService {
         GameRoom room = getRoom(roomId);
         if (room == null) return false;
 
-        room.getPlayers().removeIf(p -> p.getId().equals(playerId));
+        synchronized (room) {
+            room.getPlayers().removeIf(p -> p.getId().equals(playerId));
 
-        if (room.getPlayers().isEmpty()) {
-            deleteRoom(roomId);
-        } else {
-            if (room.getHostId().equals(playerId) && !room.getPlayers().isEmpty()) {
-                room.setHostId(room.getPlayers().get(0).getId());
+            if (!room.hasHumanPlayers()) {
+                deleteRoom(roomId);
+            } else {
+                if (room.getHostId().equals(playerId)) {
+                    room.getPlayers().stream().filter(p -> !p.getId().startsWith("bot-"))
+                            .findFirst().ifPresent(p -> room.setHostId(p.getId()));
+                }
+                saveRoom(room);
             }
-            saveRoom(room);
         }
         return true;
+    }
+
+    /** Recheck under the join/leave lock before deleting an abandoned room. */
+    public boolean deleteRoomIfNoHumans(String roomId) {
+        GameRoom room = getRoom(roomId);
+        if (room == null) return false;
+        synchronized (room) {
+            if (room.hasHumanPlayers()) return false;
+            deleteRoom(roomId);
+            return true;
+        }
     }
 
     public Player addBot(String roomId) {
@@ -170,6 +185,7 @@ public class RoomService {
         redisTemplate.delete(ROOM_PREFIX + roomId);
         redisTemplate.opsForSet().remove(ROOM_LIST_KEY, roomId);
         localRooms.remove(roomId);
+        events.publishEvent(new RoomDeletedEvent(roomId));
     }
 
     /**

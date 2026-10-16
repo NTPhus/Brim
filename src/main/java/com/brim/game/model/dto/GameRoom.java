@@ -52,6 +52,12 @@ public class GameRoom {
     }
 
     @JsonIgnore
+    public boolean hasHumanPlayers() {
+        return getPlayers().stream().anyMatch(player -> player.getId() != null
+                && !player.getId().startsWith("bot-"));
+    }
+
+    @JsonIgnore
     public boolean isFull() {
         return getPlayers().size() >= maxPlayers;
     }

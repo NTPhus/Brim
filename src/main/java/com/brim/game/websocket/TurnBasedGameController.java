@@ -32,7 +32,7 @@ public class TurnBasedGameController {
         Player player = message.getPayload();
         var room = roomService.getRoom(roomId);
         if (room == null) {
-            sendError(player.getSessionId(), "Room not found");
+            sendError(player.getId(), "Room not found");
             return;
         }
 
@@ -48,7 +48,7 @@ public class TurnBasedGameController {
             }
         } else {
             if (!room.canJoin()) {
-                sendError(player.getSessionId(), "Room not found or full");
+                sendError(player.getId(), "Room not found or full");
                 return;
             }
             room.getPlayers().add(player);

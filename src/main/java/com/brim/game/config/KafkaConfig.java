@@ -4,11 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
-import org.springframework.kafka.support.converter.JsonMessageConverter;
-import org.springframework.kafka.support.converter.RecordMessageConverter;
+import org.springframework.kafka.core.KafkaAdmin.NewTopics;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.util.backoff.FixedBackOff;
 
 @Configuration
 public class KafkaConfig {
@@ -20,18 +24,18 @@ public class KafkaConfig {
     public static final String TOPIC_LEADERBOARD = "game.leaderboard";
 
     @Bean
-    public org.springframework.kafka.listener.DefaultErrorHandler kafkaErrorHandler(
-            org.springframework.kafka.core.KafkaTemplate<String, Object> template) {
-        var recoverer = new org.springframework.kafka.listener.DeadLetterPublishingRecoverer(template,
-                (record, error) -> new org.apache.kafka.common.TopicPartition(record.topic() + ".DLT", record.partition()));
+    public DefaultErrorHandler kafkaErrorHandler(
+            KafkaTemplate<String, Object> template) {
+        var recoverer = new DeadLetterPublishingRecoverer(template,
+                (record, error) -> new TopicPartition(record.topic() + ".DLT", record.partition()));
         recoverer.setFailIfSendResultIsError(true);
-        return new org.springframework.kafka.listener.DefaultErrorHandler(recoverer,
-                new org.springframework.util.backoff.FixedBackOff(1000, 2));
+        return new DefaultErrorHandler(recoverer,
+                new FixedBackOff(1000, 2));
     }
 
     @Bean
-    public org.springframework.kafka.core.KafkaAdmin.NewTopics deadLetterTopics() {
-        return new org.springframework.kafka.core.KafkaAdmin.NewTopics(
+    public NewTopics deadLetterTopics() {
+        return new NewTopics(
             TopicBuilder.name(TOPIC_GAME_MOVE + ".DLT").partitions(3).replicas(1).build(),
             TopicBuilder.name(TOPIC_GAME_EVENT + ".DLT").partitions(3).replicas(1).build(),
             TopicBuilder.name(TOPIC_TURN_BASED + ".DLT").partitions(3).replicas(1).build(),

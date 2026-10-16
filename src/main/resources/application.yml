@@ -3,6 +3,12 @@ server:
   address: 0.0.0.0
   servlet:
     context-path: /api
+    session:
+      timeout: 4h
+      cookie:
+        http-only: true
+        same-site: strict
+        secure: ${SESSION_COOKIE_SECURE:false}
 
 spring:
   application:
@@ -24,7 +30,7 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   h2:
     console:
-      enabled: true
+      enabled: false
       path: /h2-console
 
   # Redis for session/room management
@@ -60,7 +66,8 @@ spring:
       properties:
         spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
         spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
-        spring.json.trusted.packages: "*"
+        spring.json.trusted.packages: "com.brim.game.model.dto"
+        spring.json.use.type.headers: false
         spring.json.value.default.type: com.brim.game.model.dto.GameMessage
 
   # WebSocket
@@ -69,6 +76,8 @@ spring:
 
 # Game Configuration
 game:
+  security:
+    allowed-origins: ${GAME_ALLOWED_ORIGINS:}
   snake:
     grid-width: 6000
     grid-height: 3600

@@ -11,7 +11,13 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
+import com.brim.game.security.GuestSession;
+import com.brim.game.security.RoomAccess;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 @RestController
 @RequestMapping("/rooms")
@@ -19,18 +25,21 @@ import java.util.UUID;
 public class RoomRestController {
 
     private final RoomService roomService;
+    private final RoomAccess access;
     private final SimpMessagingTemplate messagingTemplate;
 
     @PostMapping
-    public ResponseEntity<GameRoom> createRoom(@RequestBody CreateRoomRequest request) {
-        String hostId = request.hostId() != null && !request.hostId().isBlank()
-                ? request.hostId()
-                : UUID.randomUUID().toString();
+    public ResponseEntity<GameRoom> createRoom(@Valid @RequestBody CreateRoomRequest request, HttpServletRequest http) {
+        var guest = GuestSession.require(http.getSession(false));
+        access.claimedIdentity(request.hostId(), guest.id());
+        String hostId = guest.id();
+        if (roomService.getAllRooms().stream().filter(room -> hostId.equals(room.getHostId())).count() >= 3)
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, "Room limit per player reached");
         GameRoom room = roomService.createRoom(
                 request.name(),
                 request.gameType(),
                 hostId,
-                request.hostUsername(),
+                guest.username(),
                 request.maxPlayers()
         );
         String difficulty = request.difficulty() == null ? "MEDIUM" : request.difficulty().toUpperCase();
@@ -52,20 +61,19 @@ public class RoomRestController {
     }
 
     @GetMapping("/{roomId}")
-    public ResponseEntity<GameRoom> getRoom(@PathVariable String roomId) {
-        GameRoom room = roomService.getRoom(roomId);
+    public ResponseEntity<GameRoom> getRoom(@PathVariable String roomId, HttpServletRequest http) {
+        GameRoom room = access.member(roomId, GuestSession.require(http.getSession(false)).id());
         return room != null ? ResponseEntity.ok(room) : ResponseEntity.notFound().build();
     }
 
     @PostMapping("/{roomId}/join")
-    public ResponseEntity<GameRoom> joinRoom(@PathVariable String roomId, @RequestBody JoinRequest request) {
+    public ResponseEntity<GameRoom> joinRoom(@PathVariable String roomId, @RequestBody JoinRequest request, HttpServletRequest http) {
+        var guest = GuestSession.require(http.getSession(false));
+        access.claimedIdentity(request.playerId(), guest.id());
         Player player = new Player();
-        String id = request.playerId() != null && !request.playerId().isBlank()
-                ? request.playerId()
-                : request.sessionId();
-        player.setId(id);
-        player.setUsername(request.username());
-        player.setSessionId(request.sessionId());
+        player.setId(guest.id());
+        player.setUsername(guest.username());
+        player.setSessionId(null);
 
         boolean success = roomService.joinRoom(roomId, player);
         if (!success) return ResponseEntity.badRequest().build();
@@ -75,18 +83,22 @@ public class RoomRestController {
     }
 
     @PostMapping("/{roomId}/leave")
-    public ResponseEntity<Void> leaveRoom(@PathVariable String roomId, @RequestParam String playerId) {
-        roomService.leaveRoom(roomId, playerId);
+    public ResponseEntity<Void> leaveRoom(@PathVariable String roomId, @RequestParam(required = false) String playerId, HttpServletRequest http) {
+        String actual = GuestSession.require(http.getSession(false)).id();
+        access.claimedIdentity(playerId, actual);
+        access.member(roomId, actual);
+        roomService.leaveRoom(roomId, actual);
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{roomId}/ready")
-    public ResponseEntity<Void> setReady(@PathVariable String roomId, @RequestParam String playerId, @RequestParam boolean ready) {
-        GameRoom room = roomService.getRoom(roomId);
-        if (room == null) return ResponseEntity.notFound().build();
+    public ResponseEntity<Void> setReady(@PathVariable String roomId, @RequestParam(required = false) String playerId, @RequestParam boolean ready, HttpServletRequest http) {
+        String actual = GuestSession.require(http.getSession(false)).id();
+        access.claimedIdentity(playerId, actual);
+        GameRoom room = access.member(roomId, actual);
 
         room.getPlayers().stream()
-                .filter(p -> p.getId().equals(playerId))
+                .filter(p -> p.getId().equals(actual))
                 .findFirst()
                 .ifPresent(p -> p.setReady(ready));
 
@@ -95,7 +107,8 @@ public class RoomRestController {
     }
 
     @PostMapping("/{roomId}/bot")
-    public ResponseEntity<GameRoom> addBot(@PathVariable String roomId) {
+    public ResponseEntity<GameRoom> addBot(@PathVariable String roomId, HttpServletRequest http) {
+        access.host(roomId, GuestSession.require(http.getSession(false)).id());
         Player bot = roomService.addBot(roomId);
         if (bot == null) return ResponseEntity.badRequest().build();
 
@@ -105,7 +118,8 @@ public class RoomRestController {
     }
 
     @DeleteMapping("/{roomId}/bot")
-    public ResponseEntity<GameRoom> removeBot(@PathVariable String roomId) {
+    public ResponseEntity<GameRoom> removeBot(@PathVariable String roomId, HttpServletRequest http) {
+        access.host(roomId, GuestSession.require(http.getSession(false)).id());
         boolean removed = roomService.removeBot(roomId);
         if (!removed) return ResponseEntity.badRequest().build();
 
@@ -115,14 +129,17 @@ public class RoomRestController {
     }
 
     @DeleteMapping("/{roomId}")
-    public ResponseEntity<Void> deleteRoom(@PathVariable String roomId, @RequestParam String hostId) {
-        boolean deleted = roomService.deleteRoomByHost(roomId, hostId);
+    public ResponseEntity<Void> deleteRoom(@PathVariable String roomId, @RequestParam(required = false) String hostId, HttpServletRequest http) {
+        String actual = GuestSession.require(http.getSession(false)).id();
+        access.claimedIdentity(hostId, actual);
+        access.host(roomId, actual);
+        boolean deleted = roomService.deleteRoomByHost(roomId, actual);
         if (!deleted) return ResponseEntity.badRequest().build();
         // Notify remaining subscribers that room is gone
         messagingTemplate.convertAndSend("/topic/room/" + roomId + "/deleted", roomId);
         return ResponseEntity.ok().build();
     }
 
-    public record CreateRoomRequest(String name, GameType gameType, int maxPlayers, String hostId, String hostUsername, String difficulty, String mapId) {}
+    public record CreateRoomRequest(@NotBlank @Size(max = 80) String name, @NotNull GameType gameType, int maxPlayers, String hostId, String hostUsername, String difficulty, String mapId) {}
     public record JoinRequest(String username, String sessionId, String playerId) {}
 }

@@ -44,7 +44,7 @@ public class SnakeGameController {
         if (player == null || player.getId() == null || player.getId().startsWith("bot-")) return;
         var room = roomService.getRoom(roomId);
         if (room == null) {
-            sendError(player.getSessionId(), "Room not found");
+            sendError(player.getId(), "Room not found");
             return;
         }
 
@@ -62,7 +62,7 @@ public class SnakeGameController {
             if (player.getColor() != null) p.setColor(player.getColor());
         } else {
             if (!roomService.joinRoom(roomId, player)) {
-                sendError(player.getSessionId(), "Room not found or full");
+                sendError(player.getId(), "Room not found or full");
                 return;
             }
         }
@@ -156,6 +156,10 @@ public class SnakeGameController {
     private synchronized void startGame(String roomId) {
         var room = roomService.getRoom(roomId);
         if (room == null || room.getStatus() == com.brim.game.model.dto.RoomStatus.IN_PROGRESS) return;
+        if (!room.hasHumanPlayers()) {
+            roomService.deleteRoomIfNoHumans(roomId);
+            return;
+        }
         room.setStatus(com.brim.game.model.dto.RoomStatus.IN_PROGRESS);
         room.setStartedAt(java.time.LocalDateTime.now());
         roomService.saveRoom(room);
@@ -192,13 +196,11 @@ public class SnakeGameController {
     private boolean tickGame(String roomId, SnakeGame game, Map<String, Integer> scores, int[] tick) {
         if (activeGames.get(roomId) != game) return false;
         var room = roomService.getRoom(roomId);
-        if (room == null || room.getPlayers().stream().noneMatch(p -> !p.getId().startsWith("bot-"))) {
+        if (room == null || !room.hasHumanPlayers()) {
             game.setState(SnakeGame.GameState.FINISHED);
             activeGames.remove(roomId, game);
             if (room != null) {
-                room.setStatus(com.brim.game.model.dto.RoomStatus.FINISHED);
-                room.setEndedAt(java.time.LocalDateTime.now());
-                roomService.saveRoom(room);
+                roomService.deleteRoomIfNoHumans(roomId);
             }
             return false;
         }
@@ -230,6 +232,15 @@ public class SnakeGameController {
             if (!player.getId().startsWith("bot-")) {
                 messagingTemplate.convertAndSend("/topic/game/" + roomId + "/state/" + player.getId(), game.getGameState(player.getId()));
             }
+        }
+    }
+
+    @org.springframework.context.event.EventListener
+    public void onRoomDeleted(com.brim.game.service.RoomDeletedEvent event) {
+        SnakeGame game = activeGames.remove(event.roomId());
+        if (game != null) {
+            game.setState(SnakeGame.GameState.FINISHED);
+            runtime.stop(event.roomId());
         }
     }
 

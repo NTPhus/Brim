@@ -1,61 +1,41 @@
-import { createId } from '@/utils/id'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { apiFetch, resumeOrCreateGuest } from '@/api/session'
 import type { GameRoom, Player } from '@/types/game'
 
-const STORAGE_KEY = 'brim_player'
-
-interface StoredPlayer {
-  id: string
-  username: string
-  sessionId: string
-}
-
 export const useGameSession = defineStore('gameSession', () => {
-  const player = ref<Player>(loadPlayer())
+  // IDs in localStorage are deliberately ignored; identity always comes from the server session.
+  const player = ref<Player>({ id: '', username: '', sessionId: '', score: 0, ready: false, state: 'WAITING' })
   const currentRoom = ref<GameRoom | null>(null)
-
-  function loadPlayer(): Player {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      const parsed: StoredPlayer = JSON.parse(stored)
-      return {
-        id: parsed.id,
-        username: parsed.username,
-        sessionId: parsed.sessionId,
-        score: 0,
-        ready: false,
-        state: 'WAITING'
-      }
-    }
-    const newPlayer: Player = {
-      id: createId(),
-      username: 'Player_' + Math.random().toString(36).slice(2, 7),
-      sessionId: createId(),
-      score: 0,
-      ready: false,
-      state: 'WAITING'
-    }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      id: newPlayer.id,
-      username: newPlayer.username,
-      sessionId: newPlayer.sessionId
-    }))
-    return newPlayer
+  const authenticated = ref(false)
+  const profileError = ref('')
+  async function initialize() {
+    let username = localStorage.getItem('brim_username') || 'Player'
+    if (!username.trim() || username.length > 32) username = 'Player'
+    const identity = await resumeOrCreateGuest(username)
+    player.value = { id: identity.id, username: identity.username, sessionId: identity.id,
+      score: 0, ready: false, state: 'WAITING' }
+    authenticated.value = true
+    localStorage.removeItem('brim_player')
   }
-
-  function setUsername(username: string) {
-    player.value.username = username
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      id: player.value.id,
-      username: player.value.username,
-      sessionId: player.value.sessionId
-    }))
+  async function setUsername(username: string) {
+    profileError.value = ''
+    try {
+      const response = await apiFetch('/api/auth/profile', { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) })
+      if (!response.ok) throw new Error('Tên phải có 1–32 ký tự và không chứa ký tự điều khiển')
+      const identity = await response.json()
+      player.value.username = identity.username
+      localStorage.setItem('brim_username', identity.username)
+    } catch (error) { profileError.value = error instanceof Error ? error.message : 'Không thể đổi tên' }
   }
-
-  function setCurrentRoom(room: GameRoom | null) {
-    currentRoom.value = room
+  async function logout() {
+    const response = await apiFetch('/api/auth/logout', { method: 'POST' })
+    if (!response.ok && response.status !== 401) throw new Error('Không thể đăng xuất')
+    authenticated.value = false
+    currentRoom.value = null
+    player.value.id = ''
   }
-
-  return { player, currentRoom, setUsername, setCurrentRoom }
+  function setCurrentRoom(room: GameRoom | null) { currentRoom.value = room }
+  return { player, currentRoom, authenticated, profileError, initialize, setUsername, setCurrentRoom, logout }
 })

@@ -1,5 +1,28 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterView, useRouter } from 'vue-router'
+import { useGameSession } from '@/stores/gameSession'
+import { useStompClient } from '@/composables/useStompClient'
+import { onMounted, onUnmounted, ref } from 'vue'
+const session = useGameSession()
+const stomp = useStompClient()
+const router = useRouter()
+const error = ref('')
+async function logout() {
+  try { await session.logout(); await stomp.disconnect(); await router.replace('/') }
+  catch { error.value = 'Không thể đăng xuất, vui lòng thử lại' }
+}
+async function enter() {
+  try { await stomp.disconnect(); await session.initialize(); error.value = ''; await router.replace('/') }
+  catch (cause) { error.value = cause instanceof Error ? cause.message : 'Không thể tạo phiên' }
+}
+function expired() {
+  session.authenticated = false
+  session.currentRoom = null
+  void stomp.disconnect()
+  error.value = 'Phiên chơi đã hết hạn hoặc yêu cầu bị từ chối. Hãy tạo phiên mới.'
+}
+onMounted(() => window.addEventListener('brim-session-expired', expired))
+onUnmounted(() => window.removeEventListener('brim-session-expired', expired))
 </script>
 
 <template>
@@ -11,10 +34,16 @@ import { RouterView } from 'vue-router'
       </RouterLink>
       <nav>
         <RouterLink to="/">Đấu trường</RouterLink>
+        <button v-if="session.authenticated" @click="logout">Đăng xuất guest</button>
       </nav>
     </header>
     <main class="app-main">
-      <RouterView />
+      <p v-if="error || session.profileError" role="alert">{{ error || session.profileError }}</p>
+      <RouterView v-if="session.authenticated" />
+      <section v-else>
+        <p>Phiên chơi đã kết thúc.</p>
+        <button @click="enter">Vào bằng phiên guest mới</button>
+      </section>
     </main>
   </div>
 </template>

@@ -85,6 +85,10 @@ public class TurnBasedGameService {
     }
 
     public void initializeGame(GameRoom room) {
+        if (!room.hasHumanPlayers()) {
+            roomService.deleteRoomIfNoHumans(room.getId());
+            return;
+        }
         String difficulty = "MEDIUM";
         if (room.getSettings() != null && room.getSettings().getCustomSettings() != null) {
             difficulty = String.valueOf(room.getSettings().getCustomSettings().getOrDefault("difficulty", "MEDIUM"));
@@ -120,10 +124,14 @@ public class TurnBasedGameService {
     }
 
     private void triggerBotTurnIfNeeded(String roomId, TurnBasedGame game) {
+        var room = roomService.getRoom(roomId);
+        if (room == null || !room.hasHumanPlayers()) return;
         String current = game.getCurrentPlayerId();
         if (current == null || !current.startsWith("bot-") || game.isGameOver() || !pendingBots.add(roomId)) return;
         boolean accepted = botExecutor.submit(() -> {
             try {
+                var currentRoom = roomService.getRoom(roomId);
+                if (currentRoom == null || !currentRoom.hasHumanPlayers()) return;
                 if (activeGames.get(roomId) != game || !current.equals(game.getCurrentPlayerId()) || game.isGameOver()) return;
                 Object move = game.generateBotMove();
                 if (move != null && activeGames.get(roomId) == game
@@ -139,7 +147,9 @@ public class TurnBasedGameService {
     @Scheduled(fixedDelay = 500)
     public void resumeWaitingBots() {
         activeGames.forEach((roomId, game) -> {
-            if (roomService.getRoom(roomId) == null) activeGames.remove(roomId, game);
+            var room = roomService.getRoom(roomId);
+            if (room == null) activeGames.remove(roomId, game);
+            else if (!room.hasHumanPlayers()) roomService.deleteRoomIfNoHumans(roomId);
             else triggerBotTurnIfNeeded(roomId, game);
         });
     }
@@ -178,6 +188,11 @@ public class TurnBasedGameService {
      */
     public void removeGame(String roomId) {
         activeGames.remove(roomId);
+    }
+
+    @org.springframework.context.event.EventListener
+    public void onRoomDeleted(RoomDeletedEvent event) {
+        removeGame(event.roomId());
     }
 
     public interface TurnBasedGame {
