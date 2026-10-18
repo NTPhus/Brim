@@ -34,7 +34,7 @@ public class RoomAccess {
         boolean matches = switch (kind) {
             case "snake" -> room.getGameType() == GameType.SNAKE;
             case "tank" -> room.getGameType() == GameType.TANK;
-            case "turn" -> room.getGameType() == GameType.CHESS || room.getGameType() == GameType.CHINESE_CHESS;
+            case "turn" -> !room.getGameType().isRealTime() || room.getGameType() == GameType.BOMBERMAN;
             default -> false;
         };
         if (!matches) deny();

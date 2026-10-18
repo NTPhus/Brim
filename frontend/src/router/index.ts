@@ -5,6 +5,20 @@ import { useGameSession } from '@/stores/gameSession'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/warlords', name: 'warlords-hub', component: () => import('@/views/WarlordsHubView.vue') },
+    { path: '/game/warlords-campaign/:roomId', name: 'warlords-campaign', meta: { gameViewport: true }, component: () => import('@/views/WarlordsGameView.vue'), props: { mode: 'CAMPAIGN' } },
+    { path: '/game/warlords-duel/:roomId', name: 'warlords-duel', meta: { gameViewport: true }, component: () => import('@/views/WarlordsGameView.vue'), props: { mode: 'DUEL' } },
+    { path: '/game/caro/:roomId', name: 'caro', component: () => import('@/views/GridDuelView.vue'), props: { kind: 'CARO' } },
+    { path: '/game/othello/:roomId', name: 'othello', component: () => import('@/views/GridDuelView.vue'), props: { kind: 'OTHELLO' } },
+    { path: '/game/battleship/:roomId', name: 'battleship', component: () => import('@/views/BattleshipView.vue') },
+    { path: '/game/match-three/:roomId', name: 'match-three', component: () => import('@/views/MatchThreeView.vue') },
+    { path: '/game/bomberman/:roomId', name: 'bomberman', component: () => import('@/views/BombermanView.vue') },
+    {
+      path: '/game/connect-four/:roomId',
+      name: 'connect-four',
+      component: () => import('@/views/ConnectFourView.vue'),
+      props: true
+    },
     {
       path: '/',
       name: 'lobby',

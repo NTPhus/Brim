@@ -65,9 +65,9 @@ public class TurnBasedGameController {
         messagingTemplate.convertAndSend("/topic/room/" + roomId + "/state", room);
 
         TurnBasedGameService.TurnBasedGame game = turnBasedGameService.getGame(roomId);
-        if (game != null) {
-            messagingTemplate.convertAndSend("/topic/game/" + roomId + "/state", game.getState());
-        } else if (room.getPlayers().size() >= 2 && (room.getStatus() == com.brim.game.model.dto.RoomStatus.WAITING || room.getStatus() == com.brim.game.model.dto.RoomStatus.FINISHED)) {
+        if (game != null || room.getStatus() == com.brim.game.model.dto.RoomStatus.FINISHED) {
+            turnBasedGameService.sendState(roomId);
+        } else if (room.getPlayers().size() >= room.getGameType().minimumPlayers() && room.getStatus() == com.brim.game.model.dto.RoomStatus.WAITING) {
             boolean allReady = room.getPlayers().stream().allMatch(Player::isReady);
             if (allReady) {
                 startTurnGame(roomId);
@@ -77,7 +77,9 @@ public class TurnBasedGameController {
 
     @MessageMapping("/turn/{roomId}/move")
     public void makeMove(@DestinationVariable String roomId, GameMessage<Object> message) {
-        if (routeMovesThroughKafka) eventProducer.sendGameMove(roomId, message.getPlayerId(), message.getPayload());
+        var room = roomService.getRoom(roomId);
+        boolean realtime = room != null && room.getGameType().isRealTime();
+        if (routeMovesThroughKafka && !realtime) eventProducer.sendGameMove(roomId, message.getPlayerId(), message.getPayload());
         else turnBasedGameService.processMove(roomId, message.getPlayerId(), message.getPayload());
     }
 
@@ -93,7 +95,7 @@ public class TurnBasedGameController {
 
         roomService.saveRoom(room);
 
-        boolean allReady = room.getPlayers().size() >= 2 && room.getPlayers().stream().allMatch(Player::isReady);
+        boolean allReady = room.getPlayers().size() >= room.getGameType().minimumPlayers() && room.getPlayers().stream().allMatch(Player::isReady);
         if (allReady && (room.getStatus() == com.brim.game.model.dto.RoomStatus.WAITING || room.getStatus() == com.brim.game.model.dto.RoomStatus.FINISHED)) {
             startTurnGame(roomId);
         }
@@ -103,23 +105,30 @@ public class TurnBasedGameController {
     public void restartGame(@DestinationVariable String roomId) {
         var room = roomService.getRoom(roomId);
         if (room == null) return;
-        for (Player p : room.getPlayers()) {
-            p.setReady(true);
+        synchronized (room) {
+            for (Player p : room.getPlayers()) {
+                p.setReady(true);
+            }
+            room.setStatus(com.brim.game.model.dto.RoomStatus.WAITING);
+            roomService.saveRoom(room);
+            startTurnGame(roomId);
         }
-        room.setStatus(com.brim.game.model.dto.RoomStatus.WAITING);
-        roomService.saveRoom(room);
-        startTurnGame(roomId);
     }
 
     private void startTurnGame(String roomId) {
         var room = roomService.getRoom(roomId);
         if (room == null) return;
 
-        turnBasedGameService.initializeGame(room);
+        synchronized (room) {
+            // Concurrent ready/join frames must not replace a game that just started.
+            if (room.getStatus() == com.brim.game.model.dto.RoomStatus.IN_PROGRESS) return;
+            turnBasedGameService.initializeGame(room);
+            if (room.getStatus() != com.brim.game.model.dto.RoomStatus.IN_PROGRESS) return;
 
-        messagingTemplate.convertAndSend("/topic/room/" + roomId + "/state", room);
-        messagingTemplate.convertAndSend("/topic/game/" + roomId + "/started",
-                GameMessage.of(MessageType.GAME_STARTED, roomId, null, null));
+            messagingTemplate.convertAndSend("/topic/room/" + roomId + "/state", room);
+            messagingTemplate.convertAndSend("/topic/game/" + roomId + "/started",
+                    GameMessage.of(MessageType.GAME_STARTED, roomId, null, null));
+        }
     }
 
     private void sendError(String sessionId, String error) {

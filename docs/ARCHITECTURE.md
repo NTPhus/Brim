@@ -28,7 +28,7 @@ flowchart LR
 | GameRuntime | Tick worker dùng chung; giới hạn số trận; hàng đợi output có giới hạn |
 | BotExecutor | Pool CPU riêng cho tìm nước cờ, queue 32 công việc |
 | TurnBasedGameRegistry | Khởi tạo game theo module đăng ký; không cần sửa switch trong service |
-| BoardGameModules | Đăng ký factory cờ vua/cờ tướng |
+| BoardGameModules | Đăng ký cờ vua/cờ tướng, Connect Four, Caro, Othello, Battleship, Match-3 và Bomberman |
 | InterestArea | Vùng dữ liệu được phép gửi quanh viewer |
 | SpatialIndex | Chia ô để kiểm tra va chạm thân rắn gần đầu rắn |
 | Kafka / LeaderboardService | Điểm bất đồng bộ, chống áp dụng lại cùng sự kiện |
@@ -42,7 +42,7 @@ Vòng lặp không còn dùng `new Thread()` cho mỗi room. Khi room biến m�
 1. Viết lớp luật Java thuần, triển khai `TurnBasedGameService.TurnBasedGame`.
 2. `moveType()` trả về DTO input, không nhận tọa độ chưa kiểm tra rồi thay đổi bàn cờ trực tiếp.
 3. `makeMove()` kiểm tra lượt, nước đi, trạng thái đã kết thúc.
-4. `getState()` trả về snapshot tách khỏi object đang bị thay đổi; với game thông tin bí mật cần contract snapshot theo viewer, không dùng chung state công khai.
+4. `getState()` trả về snapshot tách khỏi object đang bị thay đổi. Game thông tin bí mật phải bật `privateState()` và triển khai `getState(viewerId)` như Battleship; service và controller gửi kênh riêng, không phát finalState chung. Guard cũng phải chặn subscribe kênh công khai/kênh người khác.
 5. Đăng ký bean `TurnBasedGameRegistry.Definition` trong module riêng, ví dụ:
 
 ```java
@@ -56,6 +56,8 @@ Definition connectFour() {
 7. Viết test luật trước, sau đó test hai player cùng phòng. Chạy bot trong BotExecutor nếu tính toán nặng.
 
 Registry giúp bỏ nhánh `instanceof` khi chuyển payload và switch khởi tạo trong service. Các enum/settings/UI vẫn cần đăng ký loại game mới; đây không phải hệ thống plugin tự khám phá mọi thể loại game.
+
+Contract mở rộng có `setPlayers()` cho game nhiều người, `configure()`/`checkpoint()` cho màn puzzle và `realtime()`/`tick()`/`retainPlayers()` cho Bomberman. GameRealtime này vẫn nhận DTO input qua `/app/turn`, nhưng `TurnBasedGameService` đăng ký tick 100 ms trong `GameRuntime`, không chạy bot tìm nước hoặc phát snapshot cho mỗi input. Input Bomberman luôn đi trực tiếp, không qua Kafka. Finished snapshot được giữ đến khi phòng bị xóa/khởi động lại để reconnect vẫn thấy kết quả; Battleship tiếp tục dùng snapshot riêng.
 
 ## Thêm game realtime
 

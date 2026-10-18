@@ -79,7 +79,7 @@ class RoomLifecycleTest {
     @EnumSource(GameType.class)
     void lastHumanLeavingDeletesRoomAndReleasesRunningGame(GameType type) {
         GameRoom room = rooms.createRoom("Test", type, "human", 4);
-        assertNotNull(rooms.addBot(room.getId()));
+        if (!type.isSolo()) assertNotNull(rooms.addBot(room.getId()));
         start(room);
         assertTrue(type == GameType.SNAKE || type == GameType.TANK
                 ? runtime.roomCount() == 1 : context.getBean(TurnBasedGameService.class).getGame(room.getId()) != null);
@@ -113,8 +113,20 @@ class RoomLifecycleTest {
         assertFalse(rooms.deleteRoomIfNoHumans(room.getId()));
     }
 
+    @Test void soloPuzzleHasOneSeatAndProgressPersistsOutsideRoomWithoutDowngradingUnlocks() {
+        var room = rooms.createRoom("Puzzle", GameType.MATCH_THREE, "human", 9);
+        assertEquals(1, room.getMaxPlayers());
+        assertNull(rooms.addBot(room.getId()));
+        rooms.savePuzzleProgress("human", Map.of("match3Unlocked", 4, "match3Level", 3));
+        rooms.savePuzzleProgress("human", Map.of("match3Unlocked", 2, "match3Level", 1));
+        rooms.leaveRoom(room.getId(), "human");
+        assertEquals(4, rooms.puzzleProgress("human").get("match3Unlocked"));
+        assertEquals(1, rooms.puzzleProgress("human").get("match3Level"));
+        assertTrue(rooms.puzzleProgress("other").isEmpty());
+    }
+
     @ParameterizedTest
-    @EnumSource(GameType.class)
+    @EnumSource(value = GameType.class, names = {"MATCH_THREE", "WARLORDS_CAMPAIGN"}, mode = EnumSource.Mode.EXCLUDE)
     void botOnlyRoomCannotStart(GameType type) {
         GameRoom room = rooms.createRoom("Test", type, "human", 4);
         Player bot = rooms.addBot(room.getId());

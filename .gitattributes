@@ -1,0 +1,4 @@
+# Keep shell scripts usable in Git Bash and Linux after a Windows checkout.
+*.sh text eol=lf
+mvnw text eol=lf
+mvnw.cmd text eol=crlf

@@ -30,13 +30,13 @@ const hasBot = computed(() =>
 
 const canAddBot = computed(() => {
   if (!room.value) return false
-  return room.value.players.length < room.value.maxPlayers
+  return !GAME_TYPE_INFO[room.value.gameType].solo && room.value.players.length < room.value.maxPlayers
 })
 
 const isHost = computed(() => room.value?.hostId === session.player.id)
 
 const allPlayersReady = computed(() =>
-  (room.value?.players.length ?? 0) >= 1 &&
+  (room.value?.players.length ?? 0) >= ((room.value && GAME_TYPE_INFO[room.value.gameType].solo) || room.value?.gameType === 'SNAKE' || room.value?.gameType === 'TANK' ? 1 : 2) &&
   (room.value?.players.every((p) => p.ready) ?? false)
 )
 
@@ -94,7 +94,7 @@ onMounted(async () => {
 
   // If room already in progress, navigate directly to game
   if (room.value?.status === 'IN_PROGRESS') {
-    router.replace(gamePath.value)
+    router.replace({ path: gamePath.value, query: route.query })
     return
   }
 
@@ -121,12 +121,12 @@ onMounted(async () => {
     const me = state.players.find(p => p.id === session.player.id)
     if (me) ready.value = me.ready
     if (state.status === 'IN_PROGRESS') {
-      router.push(gamePath.value)
+      router.push({ path: gamePath.value, query: route.query })
     }
   })
 
   gameRoom.subscribe(`/topic/game/${roomId.value}/started`, () => {
-    router.push(gamePath.value)
+    router.push({ path: gamePath.value, query: route.query })
   })
 
   // Redirect everyone if the room is deleted (e.g. host closes it)
@@ -165,16 +165,13 @@ function handleReady() {
 async function handleStartGame() {
   if (!canStartGame.value || starting.value) return
   starting.value = true
-  // Mark self as ready first if not already
-  if (!ready.value) {
-    ready.value = true
-    gameRoom.setReady(roomId.value, session.player.id, destination.value)
-  }
-  // Navigate to game - the backend will have already started it
+  // Adding a bot makes everyone ready but does not start the backend by itself.
+  // Ask the server to start; room/state and game/started drive navigation.
+  ready.value = true
+  gameRoom.setReady(roomId.value, session.player.id, destination.value)
   setTimeout(() => {
-    router.push(gamePath.value)
     starting.value = false
-  }, 600)
+  }, 2000)
 }
 
 const gamePath = computed(() => {
@@ -184,6 +181,14 @@ const gamePath = computed(() => {
     case GameType.TANK: return `/game/tank/${roomId.value}`
     case GameType.CHESS: return `/game/chess/${roomId.value}`
     case GameType.CHINESE_CHESS: return `/game/chinese-chess/${roomId.value}`
+    case GameType.CONNECT_FOUR: return `/game/connect-four/${roomId.value}`
+    case GameType.CARO: return `/game/caro/${roomId.value}`
+    case GameType.OTHELLO: return `/game/othello/${roomId.value}`
+    case GameType.BATTLESHIP: return `/game/battleship/${roomId.value}`
+    case GameType.MATCH_THREE: return `/game/match-three/${roomId.value}`
+    case GameType.BOMBERMAN: return `/game/bomberman/${roomId.value}`
+    case GameType.WARLORDS_CAMPAIGN: return `/game/warlords-campaign/${roomId.value}`
+    case GameType.WARLORDS_DUEL: return `/game/warlords-duel/${roomId.value}`
     default: return '/'
   }
 })
@@ -205,7 +210,7 @@ const gamePath = computed(() => {
 
       <div class="room-meta">
         <span>👥 {{ room.players.length }}/{{ room.maxPlayers }}</span>
-        <span v-if="room.gameType === 'CHESS' || room.gameType === 'CHINESE_CHESS'">
+        <span v-if="['CHESS','CHINESE_CHESS','CONNECT_FOUR','CARO','OTHELLO'].includes(room.gameType)">
           🧠 Bot: {{ room.settings?.customSettings?.difficulty === 'HARD' ? 'Khó' : room.settings?.customSettings?.difficulty === 'EASY' ? 'Dễ' : 'Vừa' }}
         </span>
       </div>
@@ -233,7 +238,7 @@ const gamePath = computed(() => {
         </button>
       </div>
 
-      <p v-if="room.players.length < 2" class="hint">
+      <p v-if="room.players.length < 2 && !GAME_TYPE_INFO[room.gameType].solo" class="hint">
         Cần ít nhất 2 người chơi để bắt đầu (có thể thêm Bot để chơi cùng)
       </p>
     </div>

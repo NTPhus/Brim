@@ -14,6 +14,9 @@ const stomp = useStompClient()
 const rooms = ref<GameRoom[]>([])
 const loading = ref(true)
 const showCreateModal = ref(false)
+const creatingRoom = ref(false)
+const roomNameError = ref('')
+const createRoomError = ref('')
 const filterType = ref<GameTypeCode | 'ALL'>('ALL')
 const leaderboard = ref<LeaderboardEntry[]>([])
 const difficultyLevels = ['EASY', 'MEDIUM', 'HARD'] as const
@@ -28,10 +31,15 @@ const newRoom = ref<CreateRoomRequest>({
   mapId: 'ARENA'
 })
 
-const isBoardGame = computed(() => ['CHESS', 'CHINESE_CHESS'].includes(newRoom.value.gameType))
+const isBoardGame = computed(() => !GAME_TYPE_INFO[newRoom.value.gameType].realTime)
+const hasBotDifficulty = computed(() => ['CHESS','CHINESE_CHESS','CONNECT_FOUR','CARO','OTHELLO'].includes(newRoom.value.gameType))
+
+watch(showCreateModal, open => {
+  if (open) { roomNameError.value = ''; createRoomError.value = '' }
+})
 
 watch(() => newRoom.value.gameType, (type) => {
-  newRoom.value.maxPlayers = ['CHESS', 'CHINESE_CHESS'].includes(type) ? 2 : (type === 'SNAKE' ? 8 : 6)
+  newRoom.value.maxPlayers = GAME_TYPE_INFO[type].solo ? 1 : !GAME_TYPE_INFO[type].realTime ? 2 : type === 'BOMBERMAN' ? 4 : (type === 'SNAKE' ? 8 : 6)
 })
 
 const filteredRooms = computed(() => {
@@ -76,9 +84,19 @@ async function refreshRooms() {
 }
 
 async function handleCreateRoom() {
+  if (creatingRoom.value) return
+  createRoomError.value = ''
+  const name = newRoom.value.name.trim()
+  if (!name || name.length > 80) {
+    roomNameError.value = !name ? 'Vui lòng nhập tên phòng.' : 'Tên phòng tối đa 80 ký tự.'
+    return
+  }
+  roomNameError.value = ''
+  creatingRoom.value = true
   try {
     const room = await createRoom({
       ...newRoom.value,
+      name,
       hostId: session.player.id,
       hostUsername: session.player.username
     })
@@ -86,7 +104,11 @@ async function handleCreateRoom() {
     showCreateModal.value = false
     await router.push(`/room/${room.id}`)
   } catch (e) {
-    console.error('Failed to create room:', e)
+    createRoomError.value = e instanceof TypeError
+      ? 'Không thể kết nối tới máy chủ. Vui lòng thử lại.'
+      : e instanceof Error ? e.message : 'Không thể tạo phòng. Vui lòng thử lại.'
+  } finally {
+    creatingRoom.value = false
   }
 }
 
@@ -130,6 +152,11 @@ function statusLabel(status: string) {
       <button class="hero-cta" @click="showCreateModal = true">Tạo trận mới <span>→</span></button>
     </section>
 
+    <section class="warlords-entry">
+      <div><span class="eyebrow">GAME MỚI · MATCH-3 CHIẾN ĐẤU</span><h2>⚔ Sơn Hà — Hợp cờ Hoa Lư</h2><p>Ghép kiếm hạ địch, tích năng lượng dùng kỹ năng. Đi 12 chương chiến dịch hoặc tạo bàn đấu tướng cùng bạn bè.</p></div>
+      <button @click="router.push('/warlords')">Vào Sơn Hà →</button>
+    </section>
+
     <div class="lobby-header">
       <div class="player-info card">
         <label>Username:</label>
@@ -141,10 +168,7 @@ function statusLabel(status: string) {
       <div class="lobby-actions">
         <select v-model="filterType">
           <option value="ALL">Tất cả game</option>
-          <option value="SNAKE">🐍 Rắn Săn Mồi</option>
-          <option value="TANK">🚜 Tank Battle</option>
-          <option value="CHESS">♟️ Cờ Vua</option>
-          <option value="CHINESE_CHESS">🀄 Cờ Tướng</option>
+          <option v-for="(info, type) in GAME_TYPE_INFO" :key="type" :value="type">{{ info.icon }} {{ info.name }}</option>
         </select>
         <button @click="showCreateModal = true">+ Tạo phòng</button>
         <button class="secondary" @click="refreshRooms">🔄 Làm mới</button>
@@ -194,7 +218,7 @@ function statusLabel(status: string) {
         </div>
         <div class="room-card-footer">
           <span class="game-type">{{ GAME_TYPE_INFO[room.gameType]?.name ?? room.gameType }}</span>
-          <span v-if="room.gameType === 'CHESS' || room.gameType === 'CHINESE_CHESS'" class="difficulty-badge">
+          <span v-if="['CHESS','CHINESE_CHESS','CONNECT_FOUR','CARO','OTHELLO'].includes(room.gameType)" class="difficulty-badge">
             🧠 {{ room.settings?.customSettings?.difficulty === 'HARD' ? 'Khó' : room.settings?.customSettings?.difficulty === 'EASY' ? 'Dễ' : 'Vừa' }}
           </span>
           <span v-if="GAME_TYPE_INFO[room.gameType]?.realTime" class="realtime-badge">⚡ Real-time</span>
@@ -203,22 +227,23 @@ function statusLabel(status: string) {
     </div>
 
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
-      <div class="modal card">
+      <form class="modal card" novalidate :aria-busy="creatingRoom" @submit.prevent="handleCreateRoom">
         <h2>Tạo phòng mới</h2>
 
-        <label>Tên phòng</label>
-        <input v-model="newRoom.name" placeholder="VD: Phòng rắn chiều thứ 7" />
+        <label for="room-name">Tên phòng (bắt buộc)</label>
+        <input id="room-name" v-model="newRoom.name" name="name" required maxlength="80"
+          :aria-invalid="!!roomNameError" :aria-describedby="roomNameError ? 'room-name-error' : 'room-name-help'"
+          placeholder="VD: Phòng rắn chiều thứ 7" @input="roomNameError = ''; createRoomError = ''" />
+        <p v-if="roomNameError" id="room-name-error" class="form-error" role="alert">{{ roomNameError }}</p>
+        <p v-else id="room-name-help" class="form-help">Nhập tên phòng từ 1 đến 80 ký tự.</p>
 
         <label>Loại game</label>
         <select v-model="newRoom.gameType">
-          <option value="SNAKE">🐍 Rắn Săn Mồi</option>
-          <option value="TANK">🚜 Tank Battle</option>
-          <option value="CHESS">♟️ Cờ Vua</option>
-          <option value="CHINESE_CHESS">🀄 Cờ Tướng</option>
+          <option v-for="(info, type) in GAME_TYPE_INFO" :key="type" :value="type">{{ info.icon }} {{ info.name }}</option>
         </select>
 
         <label>Số người chơi tối đa</label>
-        <input v-model.number="newRoom.maxPlayers" type="number" min="2" :max="newRoom.gameType === 'SNAKE' ? 12 : 8" :disabled="isBoardGame" />
+        <input v-model.number="newRoom.maxPlayers" type="number" :min="GAME_TYPE_INFO[newRoom.gameType].solo ? 1 : 2" :max="newRoom.gameType === 'BOMBERMAN' ? 4 : newRoom.gameType === 'SNAKE' ? 12 : 8" :disabled="isBoardGame" />
 
         <template v-if="newRoom.gameType === 'TANK'">
           <label>Bản đồ Tank</label>
@@ -229,7 +254,7 @@ function statusLabel(status: string) {
           </select>
         </template>
 
-        <template v-if="isBoardGame">
+        <template v-if="hasBotDifficulty">
           <label>Độ khó Bot</label>
           <div class="difficulty-options">
             <button v-for="level in difficultyLevels" :key="level" type="button"
@@ -239,16 +264,23 @@ function statusLabel(status: string) {
           </div>
         </template>
 
+        <p v-if="createRoomError" class="form-error" role="alert">{{ createRoomError }}</p>
         <div class="modal-actions">
-          <button class="secondary" @click="showCreateModal = false">Hủy</button>
-          <button @click="handleCreateRoom">Tạo & Vào phòng</button>
+          <button type="button" class="secondary" @click="showCreateModal = false">Hủy</button>
+          <button type="submit" :disabled="creatingRoom">{{ creatingRoom ? 'Đang tạo phòng…' : 'Tạo & Vào phòng' }}</button>
         </div>
-      </div>
+      </form>
     </div>
   </div>
 </template>
 
 <style scoped>
+.warlords-entry { display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:1.5rem;margin-bottom:1.5rem;border:1px solid #bf9a5966;border-radius:18px;background:radial-gradient(ellipse at 0 0,#63502f66,transparent 80%),#1b2325;color:#f0dfba; }
+.warlords-entry .eyebrow { color:#d9b975; }.warlords-entry h2 { font-family:Georgia,serif;margin:.6rem 0;font-size:1.35rem; }.warlords-entry p { color:#c1b297;font-size:.85rem;line-height:1.7;max-width:650px; }.warlords-entry button { flex-shrink:0;background:#d7b66e;color:#251c10;font-weight:800; }
+@media(max-width:650px) { .warlords-entry { flex-direction:column;align-items:stretch; } }
+.form-error { color: #fda4af; font-size: .85rem; margin: .4rem 0; }
+.form-help { color: var(--text-secondary); font-size: .8rem; margin: .4rem 0; }
+input[aria-invalid="true"] { border-color: #fda4af; }
 .lobby {
   width: 100%;
   max-width: 1200px;

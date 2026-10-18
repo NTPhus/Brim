@@ -20,8 +20,9 @@ public class GameSettings {
         GameSettings settings = new GameSettings();
         settings.maxPlayers = switch (gameType) {
             case SNAKE -> 4;
-            case TANK -> 4;
-            case CHESS, CHINESE_CHESS -> 2;
+            case TANK, BOMBERMAN -> 4;
+            case CHESS, CHINESE_CHESS, CONNECT_FOUR, CARO, OTHELLO, BATTLESHIP, WARLORDS_DUEL -> 2;
+            case MATCH_THREE, WARLORDS_CAMPAIGN -> 1;
         };
         settings.timeLimitSeconds = 300;
         settings.allowSpectators = true;

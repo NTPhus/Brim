@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { RouterView, useRouter } from 'vue-router'
+import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useGameSession } from '@/stores/gameSession'
 import { useStompClient } from '@/composables/useStompClient'
 import { onMounted, onUnmounted, ref } from 'vue'
 const session = useGameSession()
 const stomp = useStompClient()
 const router = useRouter()
+const route = useRoute()
 const error = ref('')
 async function logout() {
   try { await session.logout(); await stomp.disconnect(); await router.replace('/') }
@@ -26,7 +27,7 @@ onUnmounted(() => window.removeEventListener('brim-session-expired', expired))
 </script>
 
 <template>
-  <div class="app-container">
+  <div class="app-container" :class="{ 'game-viewport': route.meta.gameViewport }">
     <header class="app-header">
       <RouterLink to="/" class="brand">
         <span class="brand-mark">B</span>
@@ -49,6 +50,9 @@ onUnmounted(() => window.removeEventListener('brim-session-expired', expired))
 </template>
 
 <style scoped>
+.game-viewport { height:100dvh; min-height:0!important; overflow:hidden; }
+.game-viewport .app-header { display:none; }
+.game-viewport .app-main { padding:0; min-height:0; overflow:hidden; }
 .app-container {
   min-height: 100vh;
   display: flex;

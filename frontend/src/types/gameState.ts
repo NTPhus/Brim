@@ -166,3 +166,16 @@ export interface XiangqiMove {
   toX: number
   toY: number
 }
+export interface ConnectFourState {
+  roomId: string
+  board: number[][]
+  player1: string
+  player2: string
+  currentPlayer: string
+  status: 'IN_PROGRESS' | 'FINISHED' | 'DRAW'
+  winner: string | null
+  moveCount: number
+  lastMove: { row: number; column: number } | null
+  winningCells: Array<{ row: number; column: number }>
+  legalColumns: number[]
+}

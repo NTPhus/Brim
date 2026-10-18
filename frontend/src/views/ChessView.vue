@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useChessMotion } from '@/composables/useChessMotion'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStompClient } from '@/composables/useStompClient'
@@ -15,7 +16,9 @@ const stomp = useStompClient()
 
 const roomId = route.params.roomId as string
 const myPlayerId = session.player.id
+const motionBoard=ref<HTMLElement|null>(null)
 const gameState = ref<ChessGameState | null>(null)
+useChessMotion(motionBoard,gameState,true)
 const roomInfo = ref<GameRoom | null>(null)
 const selectedCell = ref<{ x: number; y: number } | null>(null)
 const error = ref<string | null>(null)
@@ -305,7 +308,7 @@ async function handleGoToLobby() {
 
     <div class="board-wrapper">
       <div class="board-container">
-        <div class="board">
+        <div ref="motionBoard" class="board">
           <div
             v-for="row in 8"
             :key="`r${row}`"
@@ -328,7 +331,7 @@ async function handleGoToLobby() {
             >
               <span
                 v-if="pieceAt[`${col - 1},${boardY(row)}`]"
-                class="piece"
+                class="piece" :data-motion-key="`${col - 1},${boardY(row)}`"
                 :class="pieceAt[`${col - 1},${boardY(row)}`]?.color === 'WHITE' ? 'white' : 'black'"
               >
                 {{ PIECE_SYMBOLS[pieceKey(pieceAt[`${col - 1},${boardY(row)}`]!)] }}

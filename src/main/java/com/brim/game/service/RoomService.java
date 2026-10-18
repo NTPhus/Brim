@@ -35,7 +35,7 @@ public class RoomService {
     public synchronized GameRoom createRoom(String name, GameType gameType, String hostId, String hostUsername, int maxPlayers) {
         if (getAllRooms().size() >= maxRooms) throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, "Server room limit reached");
-        maxPlayers = gameType == GameType.CHESS || gameType == GameType.CHINESE_CHESS ? 2 : Math.max(1, Math.min(16, maxPlayers));
+        maxPlayers = !gameType.isRealTime() ? gameType.maximumPlayers() : Math.max(gameType.minimumPlayers(), Math.min(gameType.maximumPlayers(), maxPlayers));
         GameRoom room = GameRoom.create(name, gameType, hostId, maxPlayers, GameSettings.defaultFor(gameType));
 
         Player host = new Player();
@@ -175,6 +175,26 @@ public class RoomService {
     public void saveRoom(GameRoom room) {
         redisTemplate.opsForValue().set(ROOM_PREFIX + room.getId(), room);
         localRooms.put(room.getId(), room);
+    }
+
+    public Map<String, Object> puzzleProgress(String playerId) {
+        Object stored = redisTemplate.opsForValue().get("puzzle:match3:" + playerId);
+        Map<String, Object> result = new HashMap<>();
+        if (stored instanceof Map<?, ?> values) {
+            for (String key : List.of("match3Unlocked", "match3Level")) {
+                if (values.get(key) instanceof Number number) result.put(key, number.intValue());
+            }
+        }
+        return result;
+    }
+
+    public void savePuzzleProgress(String playerId, Map<String, Object> progress) {
+        Map<String, Object> saved = puzzleProgress(playerId);
+        int unlocked = Math.max(((Number) saved.getOrDefault("match3Unlocked", 1)).intValue(),
+                ((Number) progress.getOrDefault("match3Unlocked", 1)).intValue());
+        saved.putAll(progress);
+        saved.put("match3Unlocked", unlocked);
+        redisTemplate.opsForValue().set("puzzle:match3:" + playerId, saved);
     }
 
     private void addToRoomList(GameRoom room) {

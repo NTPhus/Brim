@@ -1,0 +1,12 @@
+[
+  {"number":1,"seed":101,"moves":18,"target":500,"collectType":1,"collectTarget":0,"blocks":[],"covers":[]},
+  {"number":2,"seed":202,"moves":20,"target":700,"collectType":2,"collectTarget":8,"blocks":[],"covers":[]},
+  {"number":3,"seed":303,"moves":22,"target":900,"collectType":3,"collectTarget":12,"blocks":[],"covers":[]},
+  {"number":4,"seed":404,"moves":24,"target":1000,"collectType":4,"collectTarget":14,"blocks":[{"row":0,"column":0},{"row":7,"column":7}],"covers":[]},
+  {"number":5,"seed":505,"moves":25,"target":1200,"collectType":5,"collectTarget":16,"blocks":[{"row":0,"column":0},{"row":0,"column":7},{"row":7,"column":0},{"row":7,"column":7}],"covers":[]},
+  {"number":6,"seed":606,"moves":26,"target":1400,"collectType":6,"collectTarget":18,"blocks":[{"row":3,"column":3},{"row":4,"column":4}],"covers":[{"row":2,"column":2},{"row":5,"column":5}]},
+  {"number":7,"seed":707,"moves":28,"target":1500,"collectType":1,"collectTarget":20,"blocks":[{"row":3,"column":3},{"row":4,"column":4}],"covers":[{"row":2,"column":2},{"row":2,"column":5},{"row":5,"column":2},{"row":5,"column":5}]},
+  {"number":8,"seed":808,"moves":30,"target":1700,"collectType":2,"collectTarget":22,"blocks":[{"row":0,"column":3},{"row":7,"column":4}],"covers":[{"row":3,"column":2},{"row":3,"column":3},{"row":4,"column":4},{"row":4,"column":5}]},
+  {"number":9,"seed":909,"moves":32,"target":1900,"collectType":3,"collectTarget":24,"blocks":[{"row":2,"column":3},{"row":5,"column":4}],"covers":[{"row":1,"column":1},{"row":1,"column":6},{"row":6,"column":1},{"row":6,"column":6}]},
+  {"number":10,"seed":1010,"moves":35,"target":2200,"collectType":4,"collectTarget":26,"blocks":[{"row":0,"column":0},{"row":0,"column":7},{"row":7,"column":0},{"row":7,"column":7}],"covers":[{"row":2,"column":2},{"row":2,"column":5},{"row":5,"column":2},{"row":5,"column":5},{"row":3,"column":3},{"row":4,"column":4}]}
+]

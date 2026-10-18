@@ -1,5 +1,6 @@
 import { createId } from '@/utils/id'
 import Phaser from 'phaser'
+import { WorldEffects } from '@/game/WorldEffects'
 import type { TankGameState } from '@/types/gameState'
 
 const TANK_SIZE = 28
@@ -16,6 +17,13 @@ export class TankScene extends Phaser.Scene {
   private projectileSprites: Phaser.GameObjects.Image[] = []
   private previousHealth = new Map<string, number>()
   private smoothing = .3
+  private effects=new WorldEffects()
+  private motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)')
+  private cameraSmoothing=.12
+  private zoomSmoothing=.04
+  private bulletOrigins:Array<{x:number;y:number}>=[]
+  private snapshotAt=0
+  private snapshotInterval=50
 
   preload() {
     const base = '/assets/kenney-tanks/'
@@ -36,10 +44,29 @@ export class TankScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.sprites.clear(); this.renderedPositions.clear(); this.previousHealth.clear()
       this.projectileSprites = []
+      this.effects.clear();this.lastState=null;this.cameraReady=false;this.bulletOrigins=[];this.snapshotAt=0
     })
   }
 
   updateGameState(state: TankGameState) {
+    if(state.serverTime!==undefined&&state.serverTime===this.lastState?.serverTime)return
+    const used=new Set<number>()
+    this.bulletOrigins=state.bullets.map(bullet=>{
+      let match=-1,best=Infinity
+      this.lastState?.bullets.forEach((old,index)=>{
+        const age=old.life-bullet.life
+        if(!used.has(index)&&old.ownerId===bullet.ownerId&&Math.abs(old.angle-bullet.angle)<.001&&age>0&&age<=5&&age<best){match=index;best=age}
+      })
+      if(match>=0){
+        used.add(match)
+        const rendered=this.projectileSprites[match]
+        return rendered?{x:rendered.x,y:rendered.y}:{x:this.lastState!.bullets[match].x,y:this.lastState!.bullets[match].y}
+      }
+      if(this.lastState)this.effects.emit(bullet.x,bullet.y,0xffdd8a,12)
+      return {x:bullet.x,y:bullet.y}
+    })
+    this.snapshotInterval=Phaser.Math.Clamp(this.time.now-this.snapshotAt,16,150)
+    this.snapshotAt=this.time.now
     for (const id of this.renderedPositions.keys()) if (!state.tanks[id]) this.renderedPositions.delete(id)
     for (const [id, sprite] of this.sprites) {
       if (!state.tanks[id]) { sprite.destroy(); this.sprites.delete(id); this.previousHealth.delete(id) }
@@ -47,12 +74,14 @@ export class TankScene extends Phaser.Scene {
     for (const [id, tank] of Object.entries(state.tanks)) {
       const previous = this.previousHealth.get(id)
       if (previous !== undefined && tank.health < previous) {
-        if (id === this.playerId) this.cameras.main.shake(80, .002)
-        if (!tank.alive) {
+        this.effects.emit(tank.x,tank.y,tank.alive?0xffc078:0xff855b,tank.alive?28:65)
+        if (id === this.playerId&&!this.motionPreference.matches) this.cameras.main.shake(80, .002)
+        if (!tank.alive&&!this.motionPreference.matches) {
           const smoke = this.add.image(tank.x, tank.y, 'tank-smoke').setDepth(8).setScale(.45)
           this.tweens.add({ targets: smoke, scale: 1.3, alpha: 0, duration: 600, onComplete: () => smoke.destroy() })
         }
       }
+      if(previous!==undefined&&tank.health>previous&&this.lastState?.tanks[id]?.alive&&tank.alive)this.effects.emit(tank.x,tank.y,0x84e6a5,35)
       this.previousHealth.set(id, tank.health)
     }
     this.lastState = state
@@ -65,6 +94,9 @@ export class TankScene extends Phaser.Scene {
 
   override update(_time: number, delta: number) {
     this.smoothing = 1 - Math.exp(-Math.min(delta, 100) / 45)
+    this.cameraSmoothing=this.motionPreference.matches?1:1-Math.exp(-Math.min(delta,100)/130)
+    this.zoomSmoothing=this.motionPreference.matches?1:1-Math.exp(-Math.min(delta,100)/400)
+    if(this.motionPreference.matches)this.cameras.main.shakeEffect.reset()
     if (!this.lastState) return
     this.graphics.clear()
     this.updateCamera(this.lastState)
@@ -73,6 +105,7 @@ export class TankScene extends Phaser.Scene {
     this.drawHealthPacks(this.lastState)
     this.drawTanks(this.lastState)
     this.drawBullets(this.lastState)
+    this.effects.draw(this.graphics,delta)
   }
 
   private drawBackground() {
@@ -139,7 +172,7 @@ export class TankScene extends Phaser.Scene {
     if (!tank) return
     const rendered = this.renderedPositions.get(this.playerId) ?? tank
     const camera = this.cameras.main
-    camera.setZoom(Phaser.Math.Linear(camera.zoom, Math.max(1, this.scale.width / 2200, this.scale.height / 1400), .04))
+    camera.setZoom(Phaser.Math.Linear(camera.zoom, Math.max(1, this.scale.width / 2200, this.scale.height / 1400), this.zoomSmoothing))
     const snap = !this.cameraReady || Phaser.Math.Distance.Between(rendered.x, rendered.y, tank.x, tank.y) > 350
     if (snap) {
       camera.centerOn(tank.x, tank.y)
@@ -147,19 +180,22 @@ export class TankScene extends Phaser.Scene {
       return
     }
     camera.centerOn(
-      Phaser.Math.Linear(camera.midPoint.x, rendered.x, .12),
-      Phaser.Math.Linear(camera.midPoint.y, rendered.y, .12)
+      Phaser.Math.Linear(camera.midPoint.x, rendered.x, this.cameraSmoothing),
+      Phaser.Math.Linear(camera.midPoint.y, rendered.y, this.cameraSmoothing)
     )
   }
 
   private drawBullets(state: TankGameState) {
+    const progress=Phaser.Math.Clamp((this.time.now-this.snapshotAt)/this.snapshotInterval,0,1)
     state.bullets.forEach((bullet, index) => {
       let sprite = this.projectileSprites[index]
       if (!sprite) {
         sprite = this.add.image(0, 0, 'tank-projectile').setDisplaySize(8, 14).setDepth(3)
         this.projectileSprites.push(sprite)
       }
-      sprite.setPosition(bullet.x, bullet.y).setRotation(bullet.angle + Math.PI / 2).setVisible(true)
+      const origin=this.bulletOrigins[index]??bullet
+      sprite.setPosition(Phaser.Math.Linear(origin.x,bullet.x,progress),Phaser.Math.Linear(origin.y,bullet.y,progress))
+        .setRotation(bullet.angle + Math.PI / 2).setVisible(true)
     })
     for (let index = state.bullets.length; index < this.projectileSprites.length; index++) this.projectileSprites[index].setVisible(false)
   }

@@ -9,7 +9,15 @@ export async function createRoom(req: CreateRoomRequest): Promise<GameRoom> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req)
   })
-  if (!res.ok) throw new Error(`Failed to create room: ${res.statusText}`)
+  if (!res.ok) {
+    const messages: Record<number, string> = {
+      400: 'Thông tin phòng không hợp lệ. Tên phòng cần từ 1 đến 80 ký tự.',
+      401: 'Phiên chơi đã hết hạn. Hãy vào lại bằng phiên guest mới.',
+      403: 'Không có quyền tạo phòng. Hãy tải lại trang rồi thử lại.',
+      429: 'Đã đạt giới hạn tạo phòng. Hãy đóng bớt phòng hoặc thử lại sau.'
+    }
+    throw new Error(messages[res.status] ?? 'Máy chủ chưa thể tạo phòng. Vui lòng thử lại sau.')
+  }
   return res.json()
 }
 

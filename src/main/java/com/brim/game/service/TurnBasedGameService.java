@@ -31,11 +31,20 @@ public class TurnBasedGameService {
     private final ObjectMapper objectMapper;
     private final BotExecutor botExecutor;
     private final com.brim.game.runtime.TurnBasedGameRegistry gameRegistry;
+    private final com.brim.game.runtime.GameRuntime runtime;
     private final java.util.Set<String> pendingBots = ConcurrentHashMap.newKeySet();
 
     private final Map<String, TurnBasedGame> activeGames = new ConcurrentHashMap<>();
+    private final Map<String, TurnBasedGame> finishedGames = new ConcurrentHashMap<>();
 
     public void processMove(String roomId, String playerId, Object move) {
+        var room = roomService.getRoom(roomId);
+        if (room == null) return;
+        // A restart, timeout and command for one room form one ordered transaction.
+        synchronized (room) { processRoomMove(roomId, playerId, move); }
+    }
+
+    private void processRoomMove(String roomId, String playerId, Object move) {
         TurnBasedGame game = activeGames.get(roomId);
         if (game == null) {
             log.warn("Game not found for room: {}", roomId);
@@ -47,27 +56,49 @@ public class TurnBasedGameService {
             typedMove = objectMapper.convertValue(move, game.moveType());
         } catch (IllegalArgumentException conversionError) {
             log.warn("Invalid move payload for room {}: {}", roomId, move);
-            eventProducer.sendGameEvent(roomId, playerId, MessageType.ERROR, "Invalid move payload");
+            sendMoveError(roomId, playerId, "Invalid move payload");
             return;
         }
 
-        boolean valid = game.makeMove(playerId, typedMove);
+        boolean valid;
+        try { valid = game.makeMove(playerId, typedMove); }
+        catch (IllegalArgumentException invalid) {
+            sendMoveError(roomId, playerId, invalid.getMessage());
+            return;
+        }
         if (valid) {
+            if (game.realtime()) return; // The shared tick publishes authoritative snapshots.
+            var room = roomService.getRoom(roomId);
+            if (room != null && !game.checkpoint().isEmpty()) {
+                room.getSettings().getCustomSettings().putAll(game.checkpoint());
+                roomService.savePuzzleProgress(playerId, game.checkpoint());
+                roomService.saveRoom(room);
+            }
             // Broadcast state directly via WebSocket so frontend receives it immediately
             broadcastGameState(roomId, game);
 
             if (game.isGameOver()) {
-                endGame(roomId, game.getWinner());
+                endGame(roomId, game);
             } else {
                 triggerBotTurnIfNeeded(roomId, game);
             }
         } else {
-            eventProducer.sendGameEvent(roomId, playerId, MessageType.ERROR, "Invalid move");
+            sendMoveError(roomId, playerId, "Invalid move");
         }
+    }
+
+    private void sendMoveError(String roomId, String playerId, String text) {
+        messagingTemplate.convertAndSendToUser(playerId, "/queue/errors", GameMessage.of(MessageType.ERROR, roomId, playerId, text));
     }
 
     public TurnBasedGame getGame(String roomId) {
         return activeGames.get(roomId);
+    }
+
+    public void sendState(String roomId) {
+        TurnBasedGame game = activeGames.get(roomId);
+        if (game == null) game = finishedGames.get(roomId);
+        if (game != null) broadcastGameState(roomId, game);
     }
 
     public void handleTurnStart(String roomId, String playerId) {
@@ -85,6 +116,10 @@ public class TurnBasedGameService {
     }
 
     public void initializeGame(GameRoom room) {
+        synchronized (room) { initializeRoom(room); }
+    }
+
+    private void initializeRoom(GameRoom room) {
         if (!room.hasHumanPlayers()) {
             roomService.deleteRoomIfNoHumans(room.getId());
             return;
@@ -95,16 +130,25 @@ public class TurnBasedGameService {
         }
         TurnBasedGame game = gameRegistry.create(room.getGameType(), room.getId(), difficulty);
 
-        // Assign players
-        var players = room.getPlayers();
-        if (players.size() >= 2) {
-            game.setPlayer1(players.get(0).getId());
-            game.setPlayer2(players.get(1).getId());
+        if (room.getPlayers().size() < room.getGameType().minimumPlayers()) return;
+        game.setPlayers(room.getPlayers());
+        if (room.getGameType() == GameType.MATCH_THREE) {
+            room.getSettings().getCustomSettings().putAll(roomService.puzzleProgress(room.getPlayers().get(0).getId()));
         }
+        game.configure(room.getSettings().getCustomSettings());
 
+        finishedGames.remove(room.getId());
         activeGames.put(room.getId(), game);
         room.setStatus(RoomStatus.IN_PROGRESS);
         roomService.saveRoom(room);
+
+        if (game.realtime() && !runtime.start(room.getId(), 100, () -> tickRoom(room.getId(), game))) {
+            activeGames.remove(room.getId(), game);
+            room.setStatus(RoomStatus.WAITING);
+            roomService.saveRoom(room);
+            messagingTemplate.convertAndSend("/topic/game/" + room.getId() + "/error", Map.of("message", "Máy chủ đang đầy"));
+            return;
+        }
 
         // Broadcast initial game state directly via WebSocket
         broadcastGameState(room.getId(), game);
@@ -118,9 +162,33 @@ public class TurnBasedGameService {
      * state was sent to Kafka topic game.state with no consumer).
      */
     private void broadcastGameState(String roomId, TurnBasedGame game) {
-        Object state = game.getState();
-        messagingTemplate.convertAndSend("/topic/game/" + roomId + "/state", state);
+        if (game.privateState()) {
+            var room = roomService.getRoom(roomId);
+            if (room != null) for (var player : room.getPlayers()) {
+                if (!player.getId().startsWith("bot-")) messagingTemplate.convertAndSend(
+                        "/topic/game/" + roomId + "/state/" + player.getId(), game.getState(player.getId()));
+            }
+        } else messagingTemplate.convertAndSend("/topic/game/" + roomId + "/state", game.getState());
         log.debug("Broadcast game state for room {}", roomId);
+    }
+
+    private boolean tickRoom(String roomId, TurnBasedGame game) {
+        if (activeGames.get(roomId) != game) return false;
+        var room = roomService.getRoom(roomId);
+        if (room == null || !room.hasHumanPlayers()) {
+            activeGames.remove(roomId, game);
+            if (room != null) roomService.deleteRoomIfNoHumans(roomId);
+            return false;
+        }
+        game.retainPlayers(room.getPlayers().stream().map(com.brim.game.model.dto.Player::getId).collect(java.util.stream.Collectors.toSet()));
+        game.tick();
+        if (game.isGameOver()) {
+            // Final output must not be dropped behind an intermediate snapshot.
+            endGame(roomId, game);
+            return false;
+        }
+        runtime.publish(roomId, () -> { if (activeGames.get(roomId) == game) broadcastGameState(roomId, game); });
+        return true;
     }
 
     private void triggerBotTurnIfNeeded(String roomId, TurnBasedGame game) {
@@ -149,16 +217,34 @@ public class TurnBasedGameService {
         activeGames.forEach((roomId, game) -> {
             var room = roomService.getRoom(roomId);
             if (room == null) activeGames.remove(roomId, game);
-            else if (!room.hasHumanPlayers()) roomService.deleteRoomIfNoHumans(roomId);
-            else triggerBotTurnIfNeeded(roomId, game);
+            else {
+                synchronized (room) {
+                    if (activeGames.get(roomId) != game) return;
+                    if (!room.hasHumanPlayers()) { roomService.deleteRoomIfNoHumans(roomId); return; }
+                    boolean changed = game.advanceClock(room.getPlayers().stream().map(com.brim.game.model.dto.Player::getId)
+                            .collect(java.util.stream.Collectors.toSet()));
+                    if (changed) {
+                        broadcastGameState(roomId, game);
+                        if (game.isGameOver()) { endGame(roomId, game); return; }
+                    }
+                    triggerBotTurnIfNeeded(roomId, game);
+                }
+            }
         });
+        finishedGames.keySet().removeIf(roomId -> roomService.getRoom(roomId) == null);
     }
 
-    private void endGame(String roomId, String winnerId) {
-        TurnBasedGame game = activeGames.remove(roomId);
-        if (game == null) return;
-
+    private void endGame(String roomId, TurnBasedGame game) {
         var room = roomService.getRoom(roomId);
+        if (room == null) { activeGames.remove(roomId, game); return; }
+        synchronized (room) { finishRoom(roomId, game, room); }
+    }
+
+    private void finishRoom(String roomId, TurnBasedGame game, GameRoom room) {
+        if (!activeGames.remove(roomId, game)) return;
+        String winnerId = game.getWinner();
+        finishedGames.put(roomId, game);
+
         if (room != null) {
             room.getPlayers().stream().filter(player -> !player.getId().startsWith("bot-")).forEach(player -> {
                 int points = player.getId().equals(winnerId) ? 100 : 10;
@@ -173,12 +259,14 @@ public class TurnBasedGameService {
         }
 
         // Broadcast GAME_OVER via WebSocket directly (frontend subscribes to /topic/game/{roomId}/over)
-        Map<String, Object> gameOverPayload = Map.of("winner", winnerId != null ? winnerId : "", "finalState", game.getState());
-        messagingTemplate.convertAndSend("/topic/game/" + roomId + "/over",
-                GameMessage.of(MessageType.GAME_OVER, roomId, winnerId, gameOverPayload));
+        if (!game.privateState()) {
+            Map<String, Object> gameOverPayload = Map.of("winner", winnerId != null ? winnerId : "", "finalState", game.getState());
+            messagingTemplate.convertAndSend("/topic/game/" + roomId + "/over",
+                    GameMessage.of(MessageType.GAME_OVER, roomId, winnerId, gameOverPayload));
+        }
 
         // Also send final game state
-        messagingTemplate.convertAndSend("/topic/game/" + roomId + "/state", game.getState());
+        broadcastGameState(roomId, game);
 
         log.info("Game over in room {}. Winner: {}", roomId, winnerId);
     }
@@ -187,7 +275,9 @@ public class TurnBasedGameService {
      * Remove the active game for a room (used during cleanup).
      */
     public void removeGame(String roomId) {
-        activeGames.remove(roomId);
+        TurnBasedGame game = activeGames.remove(roomId);
+        finishedGames.remove(roomId);
+        if (game != null && game.realtime()) runtime.stop(roomId);
     }
 
     @org.springframework.context.event.EventListener
@@ -196,6 +286,18 @@ public class TurnBasedGameService {
     }
 
     public interface TurnBasedGame {
+        default void setPlayers(java.util.List<com.brim.game.model.dto.Player> players) {
+            if (!players.isEmpty()) setPlayer1(players.get(0).getId());
+            if (players.size() >= 2) setPlayer2(players.get(1).getId());
+        }
+        default void configure(Map<String, Object> settings) {}
+        default Map<String, Object> checkpoint() { return Map.of(); }
+        default boolean privateState() { return false; }
+        default Object getState(String viewerId) { return getState(); }
+        default boolean realtime() { return false; }
+        default void tick() {}
+        default void retainPlayers(java.util.Set<String> members) {}
+        default boolean advanceClock(java.util.Set<String> members) { return false; }
         Class<?> moveType();
         boolean makeMove(String playerId, Object move);
         Object getState();

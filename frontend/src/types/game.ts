@@ -1,17 +1,27 @@
-export type GameTypeCode = 'SNAKE' | 'TANK' | 'CHESS' | 'CHINESE_CHESS'
+export type GameTypeCode = 'SNAKE' | 'TANK' | 'CHESS' | 'CHINESE_CHESS' | 'CONNECT_FOUR' | 'CARO' | 'OTHELLO' | 'BATTLESHIP' | 'MATCH_THREE' | 'BOMBERMAN' | 'WARLORDS_CAMPAIGN' | 'WARLORDS_DUEL'
 
 export const GameType = {
   SNAKE: 'SNAKE',
   TANK: 'TANK',
   CHESS: 'CHESS',
-  CHINESE_CHESS: 'CHINESE_CHESS'
+  CHINESE_CHESS: 'CHINESE_CHESS',
+  CONNECT_FOUR: 'CONNECT_FOUR',
+  CARO: 'CARO', OTHELLO: 'OTHELLO', BATTLESHIP: 'BATTLESHIP', MATCH_THREE: 'MATCH_THREE', BOMBERMAN: 'BOMBERMAN', WARLORDS_CAMPAIGN: 'WARLORDS_CAMPAIGN', WARLORDS_DUEL: 'WARLORDS_DUEL'
 } as const
 
-export const GAME_TYPE_INFO: Record<GameTypeCode, { name: string; icon: string; realTime: boolean }> = {
+export const GAME_TYPE_INFO: Record<GameTypeCode, { name: string; icon: string; realTime: boolean; solo?: boolean }> = {
   SNAKE: { name: 'Rắn Săn Mồi', icon: '🐍', realTime: true },
   TANK: { name: 'Tank Battle', icon: '🚜', realTime: true },
   CHESS: { name: 'Cờ Vua', icon: '♟️', realTime: false },
-  CHINESE_CHESS: { name: 'Cờ Tướng', icon: '🀄', realTime: false }
+  CHINESE_CHESS: { name: 'Cờ Tướng', icon: '🀄', realTime: false },
+  CONNECT_FOUR: { name: 'Connect Four', icon: '🔴', realTime: false },
+  CARO: { name: 'Caro', icon: '✕', realTime: false },
+  OTHELLO: { name: 'Othello', icon: '◐', realTime: false },
+  BATTLESHIP: { name: 'Battleship', icon: '🚢', realTime: false },
+  MATCH_THREE: { name: 'Match-3', icon: '💎', realTime: false, solo: true },
+  BOMBERMAN: { name: 'Bomberman', icon: '💣', realTime: true },
+  WARLORDS_CAMPAIGN: { name: 'Sơn Hà · Chiến dịch', icon: '⚔️', realTime: false, solo: true },
+  WARLORDS_DUEL: { name: 'Sơn Hà · Đấu tướng', icon: '🏯', realTime: false }
 }
 
 export type RoomStatus = 'WAITING' | 'STARTING' | 'IN_PROGRESS' | 'PAUSED' | 'FINISHED' | 'CANCELLED'

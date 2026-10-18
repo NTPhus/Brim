@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useChessMotion } from '@/composables/useChessMotion'
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStompClient } from '@/composables/useStompClient'
@@ -15,7 +16,9 @@ const stomp = useStompClient()
 
 const roomId = route.params.roomId as string
 const myPlayerId = session.player.id
+const motionBoard=ref<HTMLElement|null>(null)
 const gameState = ref<XiangqiGameState | null>(null)
+useChessMotion(motionBoard,gameState,false)
 const roomInfo = ref<GameRoom | null>(null)
 const selectedCell = ref<{ x: number; y: number } | null>(null)
 const error = ref<string | null>(null)
@@ -301,7 +304,7 @@ function handleRestart() {
     <button v-if="isGameOver && !showResult" class="btn-secondary" @click="showResult = true">Xem kết quả</button>
 
     <div class="board-wrapper">
-      <div class="xiangqi-board">
+      <div ref="motionBoard" class="xiangqi-board">
         <!-- 10 rows (y: 0 to 9) -->
         <div
           v-for="r in ROWS"
@@ -328,7 +331,7 @@ function handleRestart() {
           >
             <span
               v-if="pieceAt[`${c - 1},${r - 1}`]"
-              class="piece"
+              class="piece" :data-motion-key="`${c - 1},${r - 1}`"
               :class="pieceAt[`${c - 1},${r - 1}`]?.color === 'RED' ? 'red' : 'black'"
             >
               <span class="piece-label">

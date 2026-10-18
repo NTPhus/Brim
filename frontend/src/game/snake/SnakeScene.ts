@@ -1,5 +1,6 @@
 import { createId } from '@/utils/id'
 import Phaser from 'phaser'
+import { WorldEffects } from '@/game/WorldEffects'
 import type { SnakeFood, SnakeGameState, SnakePosition } from '@/types/gameState'
 
 const SNAKE_COLORS = [0x2ecc71, 0x3498db, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xe74c3c]
@@ -10,12 +11,27 @@ export class SnakeScene extends Phaser.Scene {
   private targetState: SnakeGameState | null = null
   private renderBodies = new Map<string, SnakePosition[]>()
   private cameraReady = false
+  private effects=new WorldEffects()
+  private smoothing=.32
+  private cameraSmoothing=.12
+  private zoomSmoothing=.045
+  private motionPreference=window.matchMedia('(prefers-reduced-motion: reduce)')
 
   constructor() { super({ key: 'SnakeScene' }) }
 
-  create() { this.graphics = this.add.graphics() }
+  create() {
+    this.graphics = this.add.graphics()
+    this.events.once('shutdown',()=>{this.effects.clear();this.renderBodies.clear();this.targetState=null;this.cameraReady=false})
+  }
 
   updateGameState(state: SnakeGameState) {
+    if(state.serverTime!==undefined&&state.serverTime===this.targetState?.serverTime)return
+    for(const [id,snake] of Object.entries(state.snakes)){
+      const previous=this.targetState?.snakes[id],head=snake.body[0]
+      if(!previous||!head)continue
+      if(previous.alive&&!snake.alive)this.effects.emit(head.x,head.y,0xff8b99,65)
+      else if(previous.alive&&snake.alive&&snake.score>previous.score)this.effects.emit(head.x,head.y,0xffdf8a,28)
+    }
     for (const id of this.renderBodies.keys()) if (!state.snakes[id]) this.renderBodies.delete(id)
     this.targetState = state
     this.cameras.main.setBounds(0, 0, state.gridWidth, state.gridHeight)
@@ -29,15 +45,20 @@ export class SnakeScene extends Phaser.Scene {
     return this.cameras.main.getWorldPoint(localX, localY)
   }
 
-  override update() {
+  override update(_time:number,delta:number) {
     const state = this.targetState
     if (!state) return
+    const elapsed=Math.min(delta,100)
+    this.smoothing=1-Math.exp(-elapsed/43)
+    this.cameraSmoothing=this.motionPreference.matches?1:1-Math.exp(-elapsed/130)
+    this.zoomSmoothing=this.motionPreference.matches?1:1-Math.exp(-elapsed/360)
     this.interpolateBodies(state)
     this.updateCamera(state)
     this.graphics.clear()
     this.drawArena()
     this.drawFood(state.food)
     this.drawSnakes(state)
+    this.effects.draw(this.graphics,delta)
   }
 
   private interpolateBodies(state: SnakeGameState) {
@@ -51,10 +72,9 @@ export class SnakeScene extends Phaser.Scene {
       }
       while (rendered.length < snake.body.length) rendered.push({ ...snake.body[rendered.length] })
       while (rendered.length > snake.body.length) rendered.pop()
-      const interpolationStride = rendered.length > 500 ? 2 : 1
-      for (let i = 0; i < rendered.length; i += interpolationStride) {
-        rendered[i].x = Phaser.Math.Linear(rendered[i].x, snake.body[i].x, 0.32)
-        rendered[i].y = Phaser.Math.Linear(rendered[i].y, snake.body[i].y, 0.32)
+      for (let i = 0; i < rendered.length; i++) {
+        rendered[i].x = Phaser.Math.Linear(rendered[i].x, snake.body[i].x, this.smoothing)
+        rendered[i].y = Phaser.Math.Linear(rendered[i].y, snake.body[i].y, this.smoothing)
       }
     }
   }
@@ -65,14 +85,14 @@ export class SnakeScene extends Phaser.Scene {
     if (!me?.alive || !body?.[0]) return
     const desiredZoom = Math.max(this.scale.width / 3200, this.scale.height / 2000, Phaser.Math.Clamp(1.32 - Math.log2(Math.max(18, me.maxLength) / 18) * 0.16, 0.52, 1.32))
     const camera = this.cameras.main
-    camera.setZoom(Phaser.Math.Linear(camera.zoom, desiredZoom, 0.045))
+    camera.setZoom(Phaser.Math.Linear(camera.zoom, desiredZoom, this.zoomSmoothing))
     if (!this.cameraReady) {
       camera.centerOn(body[0].x, body[0].y)
       this.cameraReady = true
     } else {
       camera.centerOn(
-        Phaser.Math.Linear(camera.midPoint.x, body[0].x, 0.12),
-        Phaser.Math.Linear(camera.midPoint.y, body[0].y, 0.12)
+        Phaser.Math.Linear(camera.midPoint.x, body[0].x, this.cameraSmoothing),
+        Phaser.Math.Linear(camera.midPoint.y, body[0].y, this.cameraSmoothing)
       )
     }
   }

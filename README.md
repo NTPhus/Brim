@@ -7,6 +7,45 @@ Multi-game platform with Spring Boot, Kafka, WebSocket supporting real-time and 
 - **Tank Battle** (Real-time, WebSocket + Phaser)
 - **Chess** (Turn-based, WebSocket; optional Kafka learning mode)
 - **Chinese Chess** (Turn-based, WebSocket; optional Kafka learning mode)
+- **Connect Four** (Turn-based, WebSocket; 7×6, two players or bot)
+- **Caro** (15×15, freestyle: five or more in a row, two players or bot)
+- **Othello** (8×8, automatic pass, two players or bot)
+- **Battleship** (10×10, manual/automatic fleet placement, private player snapshots, two players or bot)
+- **Match-3** (single player, 10 seeded levels, cascade, collection targets and obstacles)
+- **Bomberman** (real-time, 2–4 players including bots, server-owned bombs, chain reactions and items)
+- **Sơn Hà — Hợp cờ Hoa Lư** (match-3 combat: 12-chapter campaign, HP/energy/skills, gold/XP/upgrades and two-player PvP rooms)
+
+## Sơn Hà — Hợp cờ Hoa Lư
+
+Trong lobby chọn **Vào Sơn Hà**, hoặc mở `/warlords`. Ghép kiếm gây sát thương, ghép năng lượng để dùng Phá trận/Hồi quân/Thiết bích; có hồi máu, khiên, vàng và kinh nghiệm. Chiến dịch có bản đồ 12 chương lấy cảm hứng từ thời 12 sứ quân, mở dần địa danh và nâng cấp trong doanh trại. Có thể tạo bàn **Sơn Hà · Đấu tướng**, mời bạn qua link phòng và đấu theo lượt trực tiếp; PvP dùng chỉ số ngang nhau.
+
+Vàng, XP, nâng cấp và chương đã mở lưu trong Redis theo phiên guest hiện tại. Các trận và thứ tự chương là sáng tác dựa trên bối cảnh lịch sử, không phải niên biểu. Xem [luật, phần thưởng, nguồn lịch sử và giới hạn bản đầu](docs/WARLORDS.md).
+
+## Các game trong roadmap
+
+Tất cả sáu game trong [GAME_ROADMAP.md](docs/GAME_ROADMAP.md) đã có phiên bản chơi được. Tạo phòng trong lobby, chọn game, rồi mời người chơi hoặc thêm bot. Match-3 chỉ cần một người; các game mới còn lại cần ít nhất hai người. Tất cả có nút chơi lại cho chủ phòng.
+
+| Game | Luật và điều khiển |
+|---|---|
+| Caro | Chọn ô trống trên bàn 15×15. X đi trước; từ 5 quân ngang/dọc/chéo là thắng, kể cả chuỗi dài hơn 5 hoặc bị chặn hai đầu. Không áp dụng luật cấm của Renju. |
+| Othello | Đen đi trước; ô có dấu chấm là nước hợp lệ. Lật tất cả hướng kẹp được. Tự bỏ lượt khi không có nước; cả hai hết nước thì so số quân, bằng nhau là hòa. |
+| Battleship | Xếp 5 tàu dài 5/4/3/3/2 ô, chọn hướng ngang/dọc hoặc xếp tự động. Tàu được chạm nhưng không chồng. Hai bên luân phiên bắn một ô, kể cả khi trúng. Hết 17 ô tàu thì thua. |
+| Match-3 | Chọn hai ô kề nhau để đổi. Nước không tạo match không trừ lượt. Đạt mục tiêu điểm, thu thập và phá hết lớp phủ để qua màn. Màn 4 trở đi có ô chắn; màn 6 trở đi có lớp phủ. Có chơi lại và chọn màn đã mở. |
+| Bomberman | Mũi tên/WASD di chuyển, Space đặt bom; có nút cảm ứng. Bom nổ sau 2 giây, lửa 0,5 giây, có nổ dây chuyền. Tường phá được có thể rơi item tăng tầm nổ/số bom. Người sống cuối thắng; cùng chết hoặc hết 180 giây là hòa. |
+
+Caro và Othello có bot Easy/Medium/Hard, tìm kiếm alpha–beta trên bản sao bàn với độ sâu tối đa 1/3/4 và ngân sách 100/450/1.500 ms. Caro giữ 12 ứng viên theo độ đe dọa để giới hạn CPU; không phải engine thi đấu chuyên nghiệp. Bot Battleship chọn từ thông tin đã bắn; bot Bomberman tránh vùng nguy hiểm và phá đường. Hai bot này chưa có ba mức khó riêng.
+
+Match-3 đọc 10 màn từ `src/main/resources/games/match-three-levels.json`. Server xử lý seed, swap, hợp nhất match giao nhau, trọng lực bị chia bởi ô chắn, tối đa 50 cascade và tạo lại bàn khi hết nước. WebSocket trả chuỗi sự kiện để frontend diễn hoạt; giảm chuyển động sẽ hiển thị ngay kết quả. Màn đã mở và màn đang chọn lưu trong Redis theo danh tính phiên khách, giữ khi tạo phòng mới bằng cùng phiên. Trạng thái bàn hiện tại ở RAM: tải lại/reconnect giữ ván khi backend vẫn chạy; restart backend bắt đầu lại màn đã lưu. Chưa có special pieces, bản đồ progression hay tài khoản đăng nhập lâu dài.
+
+Battleship chỉ phát bàn theo viewer tại `/topic/game/{roomId}/state/{playerId}`. Bàn địch chỉ có ô chưa bắn/trúng/trượt; không phát snapshot công khai hoặc `finalState` chung kể cả khi kết thúc. Guard chặn subscribe bàn người khác. REST room metadata không chứa vị trí tàu.
+
+Bomberman đăng ký tick 100 ms trong `GameRuntime`, snapshot qua worker output; input hết hạn sau 500 ms nếu không được cập nhật. Bot, đặt bom, va chạm tường/bom và thắng/thua đều do server xử lý. Không gửi input Bomberman qua Kafka ngay cả khi bật chế độ học Kafka cho game theo lượt. Phòng đang chơi không nhận người mới, nhưng thành viên cũ có thể reconnect.
+
+## Connect Four
+
+Trong lobby, chọn **Connect Four** khi tạo phòng. Mời người thứ hai hoặc thêm bot, chọn **Sẵn sàng**, rồi chọn cột để thả quân. Đỏ đi trước; nối ít nhất bốn quân cùng màu theo hàng ngang, dọc hoặc chéo để thắng. Bàn đầy mà chưa có người thắng là hòa. Chủ phòng có thể chọn **Chơi ván mới** sau khi kết thúc.
+
+Server kiểm tra lượt, cột đầy, input và kết quả; giao diện nhận bàn chơi qua WebSocket dùng chung luồng `/app/turn/{roomId}`. Payload nước đi là `{ "column": 0 }` với cột từ 0 đến 6. Bot Easy/Medium/Hard dùng tìm kiếm negamax với alpha–beta, độ sâu tối đa 1/3/6 và ngân sách 100/450/1.500 ms, chạy trên bản sao bàn trong BotExecutor.
 
 ## Chess and Chinese Chess bots
 
@@ -26,7 +65,7 @@ Both players and bots must avoid self-check. Chess supports checkmate, stalemate
 
 This is a custom engine, not a Stockfish integration. Opening books, endgame tablebases, chess repetition/fifty-move/insufficient-material draws, and Xiangqi repetition/perpetual-check adjudication are not implemented.
 
-Run backend regression tests with `mvn test`. Tests cover tactical traps, immediate wins, legal moves, special moves, state isolation, search depth, quiescence, and interruption/timeout cleanup.
+Run backend regression tests with `bash ./mvnw test` (PowerShell: `.\mvnw.cmd test`). Tests cover tactical traps, immediate wins, legal moves, special moves, state isolation, search depth, quiescence, and interruption/timeout cleanup.
 
 ## Tài liệu phát triển
 
@@ -131,7 +170,7 @@ Tank có ba map Arena/Warehouse/Crossroads, item hồi máu/khiên/tăng tốc/b
 | Session/Rooms | Redis |
 | Realtime | STOMP over WebSocket (SockJS) |
 | Frontend | Vue 3 + TypeScript + Vite |
-| Game Rendering | Phaser 3 (Snake, Tank), DOM (Chess) |
+| Game Rendering | Phaser 3 (Snake, Tank), DOM (board games, Match-3, Bomberman) |
 | Infra | Docker Compose |
 
 ## Quick Start
@@ -151,9 +190,31 @@ docker compose up -d
 ```
 
 ### 2. Run Backend
+
+Dùng JDK 17 và đặt `JAVA_HOME` trỏ tới thư mục JDK (có cả `bin/java` và `bin/javac`). Dự án có Maven Wrapper, không cần cài `mvn` vào PATH. Lần chạy đầu cần Internet để tải Maven 3.9.10 và dependency vào cache của người dùng.
+
+Git Bash / Linux / macOS:
+
 ```bash
-./run-backend.sh
-# hoặc: mvn spring-boot:run
+bash ./run-backend.sh
+# hoặc: bash ./mvnw spring-boot:run
+# Kiểm tra Maven và Java đang dùng:
+bash ./mvnw --version
+```
+
+PowerShell / CMD:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+Nếu gặp `mvn: command not found`, hãy dùng lệnh wrapper ở trên. Nếu wrapper báo `JAVA_HOME ... not defined correctly`, sửa `JAVA_HOME` tới JDK thực tế trên máy rồi mở lại terminal. Script `run-backend.sh` tự tìm thư mục dự án, không phụ thuộc đường dẫn của máy người viết.
+
+Trong Git Bash, `run-backend.sh` cũng kiểm tra `JAVA_HOME`; nếu đường dẫn sai hoặc chưa đặt, script tìm JDK 17, 21 rồi 20 trong các thư mục cài đặt Java/Adoptium thông thường. Việc chọn JDK chỉ có hiệu lực trong tiến trình chạy backend. Khi gọi `mvnw` trực tiếp, cần đặt `JAVA_HOME` đúng trong terminal, ví dụ nếu máy đã có JDK 20 tại đường dẫn sau:
+
+```bash
+export JAVA_HOME="/c/Program Files/Java/jdk-20"
+bash ./mvnw spring-boot:run
 ```
 
 ### 3. Run Frontend
@@ -211,8 +272,8 @@ Endpoint: `/api/ws/game`
 | Destination | Payload |
 |-------------|---------|
 | `/topic/room/{roomId}/state` | `GameRoom` |
-| `/topic/game/{roomId}/state` | Chess / Chinese Chess state |
-| `/topic/game/{roomId}/state/{playerId}` | Snake / Tank snapshot trong vùng nhìn |
+| `/topic/game/{roomId}/state` | Public board games, Match-3, Bomberman state |
+| `/topic/game/{roomId}/state/{playerId}` | Snake / Tank snapshot trong vùng nhìn; Battleship snapshot riêng |
 | `/topic/game/{roomId}/started` | `GameMessage` |
 | `/topic/game/{roomId}/over` | `GameMessage` |
 | `/user/queue/errors` | `GameMessage<string>` |
@@ -226,7 +287,7 @@ Endpoint: `/api/ws/game`
 | `/app/tank/{roomId}/join` | `GameMessage<Player>` |
 | `/app/tank/{roomId}/input` | `GameMessage<TankInput>` |
 | `/app/turn/{roomId}/join` | `GameMessage<Player>` |
-| `/app/turn/{roomId}/move` | `GameMessage<ChessMove>` |
+| `/app/turn/{roomId}/move` | `GameMessage<Move>` theo DTO từng game (bao gồm Bomberman input) |
 
 ## Project Structure
 
@@ -238,7 +299,14 @@ BRIM/
 │   │   ├── snake/           # Snake game logic
 │   │   ├── tank/            # Tank game logic
 │   │   ├── chess/           # Chess game logic
-│   │   └── chinesechess/    # Chinese Chess logic
+│   │   ├── chinesechess/    # Chinese Chess logic
+│   │   ├── connectfour/     # Connect Four rules and bot
+│   │   ├── board/           # Shared Caro/Othello snapshots and bounded bot search
+│   │   ├── caro/            # Freestyle Gomoku
+│   │   ├── othello/         # Flips, automatic pass and scoring
+│   │   ├── battleship/      # Hidden fleets and viewer snapshots
+│   │   ├── matchthree/      # Seeded puzzle engine and level progression
+│   │   └── bomberman/      # Server tick, bombs and items
 │   ├── kafka/               # Kafka producer/consumer
 │   ├── model/dto/           # DTOs (Room, Player, GameMessage...)
 │   ├── service/             # RoomService, TurnBasedGameService

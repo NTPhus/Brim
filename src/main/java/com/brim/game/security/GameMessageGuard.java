@@ -77,7 +77,7 @@ public class GameMessageGuard implements ChannelInterceptor {
         if (action.equals("restart")) access.host(roomId, guest.id());
         boolean input = action.equals("input") || action.equals("move");
         if (!limits.allow((input && !kind.equals("turn") ? "input:" : "control:") + guest.id(),
-                input && !kind.equals("turn") ? 60 : 12, input && !kind.equals("turn") ? 30 : 4)) RoomAccess.deny();
+                input && (!kind.equals("turn") || room.getGameType() == GameType.BOMBERMAN) ? 60 : 12, input && (!kind.equals("turn") || room.getGameType() == GameType.BOMBERMAN) ? 30 : 4)) RoomAccess.deny();
         try {
             if (!(message.getPayload() instanceof byte[] bytes) || bytes.length > 4096) RoomAccess.deny();
             var tree = mapper.readTree((byte[]) message.getPayload());
@@ -119,10 +119,11 @@ public class GameMessageGuard implements ChannelInterceptor {
         if (!match.matches()) { RoomAccess.deny(); return; }
         var room = access.member(match.group(2), playerId);
         String suffix = match.group(3);
+        if (room.getGameType() == GameType.BATTLESHIP && match.group(1).equals("game") && suffix.equals("over")) RoomAccess.deny();
         if (suffix.startsWith("state/")) {
             if (!suffix.equals("state/" + playerId) || match.group(1).equals("room")) RoomAccess.deny();
         } else if (suffix.equals("state") && match.group(1).equals("game")
-                && (room.getGameType() == GameType.TANK || room.getGameType() == GameType.SNAKE)) RoomAccess.deny();
+                && (room.getGameType() == GameType.TANK || room.getGameType() == GameType.SNAKE || room.getGameType() == GameType.BATTLESHIP)) RoomAccess.deny();
     }
 
     /** Re-check after leave/logout, including subscriptions that were allowed earlier. */

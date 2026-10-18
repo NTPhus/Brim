@@ -1,0 +1,19 @@
+.motion-piece {display:grid;place-items:center;width:100%;height:100%;position:relative;pointer-events:none;}
+.arcade .grid-cell,.connect-four .cell {position:relative;}
+.arcade .grid-cell:enabled:hover,.connect-four .column:enabled:hover {transform:none;}
+.arcade-players span,.connect-four .players span {transition:border-color 180ms,background-color 180ms;}
+.arcade .grid-cell.winning {animation:winning-glow 650ms ease-out 2;}
+.connect-four .cell.winning {animation:winning-glow 650ms ease-out 2;}
+.game-finished>[role="status"] {animation:result-reveal 300ms ease-out both;}
+:is(.chess-game,.xiangqi-game) .piece {position:relative;z-index:1;}
+:is(.chess-game,.xiangqi-game) .modal-content,
+:is(.snake-game-container,.tank-game) :is(.modal-card,.death-card) {animation:result-reveal 220ms ease-out both;}
+.warlords .battle-result {animation:result-fade 220ms ease-out both;}
+@keyframes result-reveal {from{opacity:0;transform:translateY(8px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
+@keyframes result-fade {from{opacity:0;}to{opacity:1;}}
+@keyframes winning-glow {0%,100%{filter:brightness(1);}45%{filter:brightness(1.3);}}
+@media(prefers-reduced-motion:reduce){
+ :is(.arcade,.connect-four,.chess-game,.xiangqi-game,.snake-game-container,.tank-game,.warlords) *,
+ :is(.arcade,.connect-four,.chess-game,.xiangqi-game,.snake-game-container,.tank-game,.warlords) *::before,
+ :is(.arcade,.connect-four,.chess-game,.xiangqi-game,.snake-game-container,.tank-game,.warlords) *::after {animation:none!important;transition:none!important;scroll-behavior:auto!important;}
+}

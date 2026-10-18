@@ -8,6 +8,7 @@ import App from './App.vue'
 import { useGameSession } from './stores/gameSession'
 import router from './router'
 import './style.css'
+import './game/motion.css'
 
 const app = createApp(App)
 app.use(createPinia())
