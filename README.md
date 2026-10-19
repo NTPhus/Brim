@@ -2,6 +2,10 @@
 
 Multi-game platform with Spring Boot, Kafka, WebSocket supporting real-time and turn-based games.
 
+## Dấu chân Việt — game chiến dịch riêng
+
+Mở **Dấu chân Việt** từ sảnh hoặc `/vietnam`. Ba màn đầu: Điện Biên Phủ 1954 (bộ binh/chiến hào), Củ Chi (địa đạo hai lớp/cứu trợ), Sài Gòn 30/4/1975 (kíp xe tăng 390). Có đồng đội AI, mục tiêu nhiều bước, tương tác cửa hầm, nạp đạn, khom người và mở khóa màn theo phiên guest. Đây là đồ họa 2D cách điệu; xem [đặc tả gameplay chiến thuật, hiện trạng, tư liệu và kế hoạch triển khai](docs/VIETNAM_CAMPAIGN.md).
+
 ## Games Included
 - **Snake** (Real-time, WebSocket + Phaser)
 - **Tank Battle** (Real-time, WebSocket + Phaser)
@@ -71,6 +75,7 @@ Run backend regression tests with `bash ./mvnw test` (PowerShell: `.\mvnw.cmd te
 
 - [Deploy Docker và chơi cùng phòng qua LAN/Internet](docs/DEPLOYMENT.md)
 - [Kiến trúc, runtime và cách đăng ký game mới](docs/ARCHITECTURE.md)
+- [Kế hoạch nền tảng multiplayer, game services và Kafka](docs/ARCHITECTURE_ROADMAP.md)
 - [Mạng kém, AOI, giới hạn CPU/RAM và đo tải](docs/NETWORKING_AND_PERFORMANCE.md)
 - [Bài thực hành Kafka: topic, group, offset, retry, DLT, dedup](docs/KAFKA_LAB.md)
 - [Lộ trình game mới: Connect Four, Caro, Othello, Battleship, match-3, Bomberman](docs/GAME_ROADMAP.md)
@@ -157,7 +162,14 @@ Các mục dưới đây là đề xuất, chưa phải tính năng đang có. �
 
 Vue/Phaser → REST/STOMP → backend sở hữu simulation. Realtime dùng worker tick chung, snapshot theo vùng nhìn và worker output riêng. Bot cờ dùng pool CPU có giới hạn. Kafka xử lý điểm/sự kiện nền; nước cờ mặc định xử lý trực tiếp, có tùy chọn bật đường Kafka để học. Redis giữ room metadata và bảng điểm. Trạng thái trận vẫn ở RAM của **một backend**.
 
-Tank có ba map Arena/Warehouse/Crossroads, item hồi máu/khiên/tăng tốc/bắn nhanh và [asset Kenney CC0](frontend/public/assets/kenney-tanks/SOURCE.md).
+Tank có tám map: Đấu trường mở, Nhà kho, Giao lộ, Hẻm núi, Phế tích, Pháo đài, Bãi tiếp vận và Cụm lô cốt, item hồi máu/khiên/tăng tốc/bắn nhanh và [asset Kenney CC0](frontend/public/assets/kenney-tanks/SOURCE.md).
+
+Khi tạo phòng Tank, chọn một trong hai chế độ:
+
+- **Đột kích (Assault)**: chơi một mình hoặc hợp tác chống các đợt bộ binh và tank AI. Xe chạy nhanh hơn 80%; W/S tiến lùi, A/D xoay thân xe, chuột ngắm tháp pháo độc lập, giữ chuột trái hoặc Space để bắn. Đạn pháo nổ khi chạm vật cản đầu tiên hoặc tới điểm chọn, giới hạn tầm 700 đơn vị. Vòng ngắm hiển thị bán kính nổ cố định 120; sát thương giảm tuyến tính từ 70 ở tâm về 0 ở rìa. Tank khai hỏa cũng chịu sát thương theo khoảng cách nếu đứng trong vùng nổ; tự hủy không nhận điểm hay tiếp tế. Đồng đội khác không chịu sát thương lan. Vòng ngắm dừng ở vật cản và chuyển đỏ nếu tank nằm trong vùng nổ. Bộ binh tìm đường quanh công trình, bắn khi có đường ngắm; minimap đánh dấu quân địch còn lại.
+- **Đấu trường cổ điển (Classic)**: giữ luật đấu tank đối kháng và đạn trực tiếp của phiên bản trước. Phòng cũ không có `tankMode` tiếp tục dùng Classic.
+
+Trong Đột kích, hạ lính nhận 25 điểm/tiếp tế, hạ tank nhận 100; qua đợt nhận thêm 75 tiếp tế và sửa 30 HP. Nâng động cơ, pháo hoặc giáp tối đa 3 cấp, chi phí lần lượt 100/200/300 tiếp tế. Pháo thêm 15 sát thương mỗi cấp, tăng tốc bắn; giáp thêm 35 HP mỗi cấp. Sau mỗi 3 đợt, đội chuyển sang bản đồ tiếp theo; địch tăng dần với giới hạn 30 lính và 5 tank. Hồi sinh giữ điểm, tiếp tế và nâng cấp **trong trận**; chơi lại bắt đầu trận mới.
 
 ![Tank Battle](docs/images/tank-preview.png)
 
@@ -285,7 +297,8 @@ Endpoint: `/api/ws/game`
 | `/app/snake/{roomId}/move` | `GameMessage<{direction}>` |
 | `/app/snake/{roomId}/ready` | `GameMessage` |
 | `/app/tank/{roomId}/join` | `GameMessage<Player>` |
-| `/app/tank/{roomId}/input` | `GameMessage<TankInput>` |
+| `/app/tank/{roomId}/input` | `GameMessage<TankInput>` (Assault thêm `targetX`, `targetY`) |
+| `/app/tank/{roomId}/upgrade` | `GameMessage<{branch: "ENGINE" ∣ "CANNON" ∣ "ARMOR"}>` |
 | `/app/turn/{roomId}/join` | `GameMessage<Player>` |
 | `/app/turn/{roomId}/move` | `GameMessage<Move>` theo DTO từng game (bao gồm Bomberman input) |
 

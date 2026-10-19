@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tankMap } from '@/game/tank/maps'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import Phaser from 'phaser'
 import { useRoute, useRouter } from 'vue-router'
@@ -50,6 +51,19 @@ const pressedKeys = new Set<string>()
 const cleanupFns = ref<Array<() => void>>([])
 let clockTimer: number | undefined
 
+const assault = computed(() => gameState.value?.mode === 'ASSAULT')
+const myTank = computed(() => gameState.value?.tanks[myPlayerId])
+const upgrades = computed(() => [
+  { branch: 'ENGINE', label: 'Động cơ', level: myTank.value?.engineLevel ?? 0, detail: '+ tốc độ' },
+  { branch: 'CANNON', label: 'Pháo', level: myTank.value?.cannonLevel ?? 0, detail: '+ sát thương / tốc bắn' },
+  { branch: 'ARMOR', label: 'Giáp', level: myTank.value?.armorLevel ?? 0, detail: '+35 HP & sửa chữa' }
+])
+function upgrade(branch: string) {
+  stomp.publish(`/app/tank/${roomId}/upgrade`, {
+    type: MessageType.ACTION, roomId, playerId: myPlayerId, payload: { branch }
+  })
+}
+
 const activeEffects = computed(() => {
   const tank = gameState.value?.tanks[myPlayerId]
   return [
@@ -62,6 +76,7 @@ const activeEffects = computed(() => {
 const respawnRemaining = computed(() => Math.max(0, Math.ceil((diedAt.value + 3000 - clock.value) / 1000)))
 
 function sendInput() {
+  const aim = tankScene?.getAim()
   stomp.publish(`/app/tank/${roomId}/input`, {
     type: MessageType.ACTION,
     roomId,
@@ -71,7 +86,8 @@ function sendInput() {
       movingBackward: input.value.backward,
       turningLeft: input.value.turnLeft,
       turningRight: input.value.turnRight,
-      shooting: input.value.shoot
+      shooting: input.value.shoot || !!aim?.shooting,
+      ...(aim ? { targetX: aim.targetX, targetY: aim.targetY } : {})
     }
   })
 }
@@ -238,6 +254,8 @@ onMounted(async () => {
     }, 400)
 
     const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target?.closest('input, select, textarea') || (target?.closest('button') && ['Space', 'Enter'].includes(e.code))) return
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
         e.preventDefault()
       }
@@ -304,8 +322,25 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="hint">
+    <div v-if="!assault" class="hint">
       🎮 <strong>W / ⬆️</strong> Tiến • <strong>S / ⬇️</strong> Lùi • <strong>A / ⬅️</strong> Rẽ trái • <strong>D / ➡️</strong> Rẽ phải • <strong>SPACE</strong> Bắn đạn
+    </div>
+
+    <div v-if="assault" class="assault-panel">
+      <div class="mission-status"><strong>ĐỘT KÍCH · {{ tankMap(gameState?.mapId ?? 'ARENA').name }}</strong>
+        <span>Đợt {{ gameState?.wave || 1 }} · {{ gameState?.enemiesRemaining }} địch
+          <template v-if="gameState?.enemiesRemaining === 0"> · Tiếp viện sau {{ Math.ceil((gameState?.nextWaveTicks ?? 0) / 20) }}s</template>
+        </span>
+        <strong>{{ myTank?.credits ?? 0 }} tiếp tế</strong>
+      </div>
+      <div class="upgrade-bar">
+        <button v-for="item in upgrades" :key="item.branch" class="upgrade-button"
+          :disabled="!alive || item.level >= 3 || (myTank?.credits ?? 0) < (item.level + 1) * 100" @click="upgrade(item.branch)">
+          {{ item.label }} {{ item.level }}/3 · {{ item.level >= 3 ? 'Tối đa' : `${(item.level + 1) * 100} tiếp tế` }}
+          <small>{{ item.detail }}</small>
+        </button>
+      </div>
+      <div class="hint">W/S tiến lùi · A/D xoay xe · Chuột ngắm / giữ chuột trái hoặc Space để bắn · Tầm 700 · Bán kính nổ 120, sát tâm đau hơn · Nổ khi chạm vật cản · Đứng gần điểm nổ sẽ tự mất máu</div>
     </div>
 
     <div class="canvas-wrapper">
@@ -337,7 +372,7 @@ onUnmounted(() => {
         <div class="death-card">
           <span class="death-icon">💥</span>
           <h2>Xe tăng đã bị phá hủy</h2>
-          <p>Bạn vẫn giữ <strong>{{ score }} điểm</strong></p>
+          <p>{{ assault ? "Hồi sinh giữ điểm, tiếp tế và nâng cấp trong trận." : "Hồi sinh bắt đầu lượt mới, điểm về 0." }}</p>
           <button :disabled="respawnRemaining > 0" @click="handleRespawn">
             {{ respawnRemaining > 0 ? `Hồi sinh sau ${respawnRemaining}s` : '🛡️ Trở lại chiến trường' }}
           </button>
@@ -367,6 +402,13 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.assault-panel { width: 100%; padding: .5rem .75rem; border: 1px solid #59604a; border-radius: 10px; background: #18241f; }
+.mission-status { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .35rem; color: #f2dba3; font-size: .8rem; }
+.upgrade-bar { display: flex; gap: .4rem; margin: .4rem 0; }
+.upgrade-button { flex: 1; padding: .35rem .5rem; background: #304636; border: 1px solid #75865a; font-size: .75rem; color: #fff0cc; }
+.upgrade-button small { display: block; font-size: .65rem; opacity: .8; }
+.upgrade-button:disabled { opacity: .45; cursor: default; }
+
 .network-strip { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 1rem; font-size: .75rem; color: #bbdccb; background: #17261f; border-bottom: 1px solid #34523f; }
 .network-strip span { color: #91a89a; }
 .item-legend { padding: .45rem 1rem; color: #bad2c2; background: #112019; font-size: .75rem; }

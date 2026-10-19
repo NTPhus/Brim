@@ -1,6 +1,7 @@
 import { createId } from '@/utils/id'
 import Phaser from 'phaser'
 import { WorldEffects } from '@/game/WorldEffects'
+import { tankMap, shellImpact } from './maps'
 import type { TankGameState } from '@/types/gameState'
 
 const TANK_SIZE = 28
@@ -84,8 +85,16 @@ export class TankScene extends Phaser.Scene {
       if(previous!==undefined&&tank.health>previous&&this.lastState?.tanks[id]?.alive&&tank.alive)this.effects.emit(tank.x,tank.y,0x84e6a5,35)
       this.previousHealth.set(id, tank.health)
     }
+    this.terrain?.setTint(tankMap, shellImpact(state.mapId).terrain)
     this.lastState = state
     this.cameras.main.setBounds(0, 0, state.mapWidth, state.mapHeight)
+  }
+
+  getAim(): { targetX: number; targetY: number; shooting: boolean } | null {
+    if (!this.cameraReady || this.lastState?.mode !== 'ASSAULT') return null
+    const pointer = this.input.activePointer
+    const point = this.cameras.main.getWorldPoint(pointer.x, pointer.y)
+    return { targetX: point.x, targetY: point.y, shooting: pointer.isDown && pointer.button === 0 }
   }
 
   setPlayerId(id: string) {
@@ -105,6 +114,7 @@ export class TankScene extends Phaser.Scene {
     this.drawHealthPacks(this.lastState)
     this.drawTanks(this.lastState)
     this.drawBullets(this.lastState)
+    this.drawAssault(this.lastState)
     this.effects.draw(this.graphics,delta)
   }
 
@@ -121,7 +131,7 @@ export class TankScene extends Phaser.Scene {
       if (!Phaser.Geom.Rectangle.Overlaps(view, new Phaser.Geom.Rectangle(wall.x, wall.y, wall.width, wall.height))) continue
       this.graphics.fillStyle(0x050811, .35)
       this.graphics.fillRoundedRect(wall.x + 5, wall.y + 7, wall.width, wall.height, 5)
-      this.graphics.fillStyle(0x40516a, 1)
+      this.graphics.fillStyle(tankMap, shellImpact(state.mapId).wall, 1)
       this.graphics.fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 5)
       this.graphics.fillStyle(0x536b86, .55)
       this.graphics.fillRoundedRect(wall.x + 3, wall.y + 3, Math.max(1, wall.width - 6), Math.max(1, wall.height - 6), 4)
@@ -158,10 +168,11 @@ export class TankScene extends Phaser.Scene {
         .setAlpha(tank.alive ? 1 : .28).setVisible(view.contains(rendered.x, rendered.y))
       ;(sprite.getAt(1) as Phaser.GameObjects.Image).setTint(color)
       ;(sprite.getAt(2) as Phaser.GameObjects.Image).setTint(color)
+        .setRotation(state.mode === 'ASSAULT' ? Phaser.Math.Angle.Wrap(tank.turretAngle - rendered.angle) : 0)
       if (!tank.alive || !sprite.visible) continue
       this.graphics.fillStyle(0x101a16, .9).fillRoundedRect(rendered.x - 21, rendered.y - 34, 42, 6, 3)
       this.graphics.fillStyle(tank.health > 30 ? 0x84e6a5 : 0xff8071)
-        .fillRoundedRect(rendered.x - 20, rendered.y - 33, 40 * Math.max(0, tank.health) / 100, 4, 2)
+        .fillRoundedRect(rendered.x - 20, rendered.y - 33, 40 * Math.max(0, tank.health) / (tank.maxHealth || 100), 4, 2)
       if ((tank.shieldUntil ?? 0) > Date.now()) this.graphics.lineStyle(3, 0x7cd9fa, .8).strokeCircle(rendered.x, rendered.y, 30)
       if (isMe) this.graphics.lineStyle(2, 0xc4f7e5, .8).strokeCircle(rendered.x, rendered.y, 26)
     }
@@ -198,6 +209,55 @@ export class TankScene extends Phaser.Scene {
         .setRotation(bullet.angle + Math.PI / 2).setVisible(true)
     })
     for (let index = state.bullets.length; index < this.projectileSprites.length; index++) this.projectileSprites[index].setVisible(false)
+  }
+
+  private drawAssault(state: TankGameState) {
+    if (state.mode !== 'ASSAULT') return
+    const g = this.graphics
+    for (const unit of state.infantry ?? []) {
+      const target = Object.values(state.tanks).filter(t => t.alive && !t.playerId.startsWith('bot-'))
+        .sort((a, b) => Phaser.Math.Distance.Between(a.x, a.y, unit.x, unit.y) - Phaser.Math.Distance.Between(b.x, b.y, unit.x, unit.y))[0]
+      const angle = target ? Math.atan2(target.y - unit.y, target.x - unit.x) : 0
+      const stride = this.motionPreference.matches ? 0 : Math.sin(this.time.now / 100 + unit.x) * 3
+      g.fillStyle(0x090e0c, .35).fillEllipse(unit.x + 3, unit.y + 5, 19, 13)
+      g.lineStyle(4, 0x29362c).lineBetween(unit.x - 4, unit.y + 5, unit.x - 4 + stride, unit.y + 10)
+      g.lineBetween(unit.x + 4, unit.y + 5, unit.x + 4 - stride, unit.y + 10)
+      g.fillStyle(0xa66545).fillRoundedRect(unit.x - 7, unit.y - 4, 14, 13, 3)
+      g.fillStyle(0xe8c29a).fillCircle(unit.x, unit.y - 5, 5)
+      g.fillStyle(0x586746).fillEllipse(unit.x, unit.y - 8, 13, 7)
+      g.lineStyle(3, 0x222c29).lineBetween(unit.x, unit.y, unit.x + Math.cos(angle) * 17, unit.y + Math.sin(angle) * 17)
+      if (unit.cooldown >= 33 && target && Phaser.Math.Distance.Between(unit.x, unit.y, target.x, target.y) < 310)
+        g.lineStyle(1, 0xffcf72, .5).lineBetween(unit.x, unit.y, target.x, target.y)
+      g.fillStyle(0xef8063).fillRect(unit.x - 9, unit.y - 17, 18 * Math.min(1, unit.health / 60), 3)
+    }
+    const now = (state.serverTime ?? Date.now()) + this.time.now - this.snapshotAt
+    for (const blast of state.explosions ?? []) {
+      const life = Phaser.Math.Clamp((blast.expiresAt - now) / 650, 0, 1)
+      if (life <= 0) continue
+      const radius = blast.radius * (1 - life * .6)
+      g.fillStyle(0xff8f38, life * .24).fillCircle(blast.x, blast.y, radius)
+      g.lineStyle(3, 0xffcd75, life).strokeCircle(blast.x, blast.y, radius)
+      g.fillStyle(0xffecc1, life * .75).fillCircle(blast.x, blast.y, 25 * life)
+    }
+    for (const shell of state.bullets.filter(b => b.shell && b.ownerId !== this.playerId)) {
+      const impact = shellImpact(shell.x, shell.y, shell.targetX, shell.targetY, state.walls)
+      g.lineStyle(1, 0xff7961, .35).strokeCircle(impact.x, impact.y, 120)
+    }
+    const tank = state.tanks[this.playerId]
+    const aim = this.getAim()
+    if (!tank?.alive || !aim) return
+    const tx = Phaser.Math.Clamp(aim.targetX, 25, state.mapWidth - 25)
+    const ty = Phaser.Math.Clamp(aim.targetY, 25, state.mapHeight - 25)
+    const angle = Math.atan2(ty - tank.y, tx - tank.x)
+    const distance = Math.min(700, Phaser.Math.Distance.Between(tank.x, tank.y, tx, ty))
+    const impact = shellImpact(tank.x, tank.y, tank.x + Math.cos(angle) * distance, tank.y + Math.sin(angle) * distance, state.walls)
+    const { x, y } = impact
+    const danger = Phaser.Math.Distance.Between(tank.x, tank.y, x, y) < 120
+    const color = danger ? 0xff6655 : impact.blocked ? 0xffa64d : 0xffdc92
+    g.lineStyle(1, color, .35).lineBetween(tank.x, tank.y, x, y)
+    g.fillStyle(color, danger ? .12 : .04).fillCircle(x, y, 120)
+    g.lineStyle(1.5, color, .8).strokeCircle(x, y, 120)
+    g.strokeCircle(x, y, 9).lineBetween(x - 16, y, x + 16, y).lineBetween(x, y - 16, x, y + 16)
   }
 
   private drawHealthPacks(state: TankGameState) {

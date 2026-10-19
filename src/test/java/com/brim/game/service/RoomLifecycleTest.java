@@ -127,7 +127,7 @@ class RoomLifecycleTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = GameType.class, names = {"MATCH_THREE", "WARLORDS_CAMPAIGN"}, mode = EnumSource.Mode.EXCLUDE)
+    @EnumSource(value = GameType.class, names = {"MATCH_THREE", "WARLORDS_CAMPAIGN", "VIETNAM_CAMPAIGN"}, mode = EnumSource.Mode.EXCLUDE)
     void botOnlyRoomCannotStart(GameType type) {
         GameRoom room = rooms.createRoom("Test", type, "human", 4);
         Player bot = rooms.addBot(room.getId());

@@ -30,7 +30,8 @@ const hasBot = computed(() =>
 
 const canAddBot = computed(() => {
   if (!room.value) return false
-  return !GAME_TYPE_INFO[room.value.gameType].solo && room.value.players.length < room.value.maxPlayers
+  return !(room.value.gameType === 'TANK' && room.value.settings?.customSettings?.tankMode === 'ASSAULT')
+    && !GAME_TYPE_INFO[room.value.gameType].solo && room.value.players.length < room.value.maxPlayers
 })
 
 const isHost = computed(() => room.value?.hostId === session.player.id)
@@ -177,6 +178,7 @@ async function handleStartGame() {
 const gamePath = computed(() => {
   const type = room.value?.gameType
   switch (type) {
+    case GameType.VIETNAM_CAMPAIGN: return `/game/vietnam/${roomId.value}`
     case GameType.SNAKE: return `/game/snake/${roomId.value}`
     case GameType.TANK: return `/game/tank/${roomId.value}`
     case GameType.CHESS: return `/game/chess/${roomId.value}`
@@ -202,7 +204,9 @@ const gamePath = computed(() => {
           <span class="game-icon">{{ GAME_TYPE_INFO[room.gameType]?.icon }}</span>
           <div>
             <h2>{{ room.name }}</h2>
-            <p class="text-muted">{{ GAME_TYPE_INFO[room.gameType]?.name }}</p>
+            <p class="text-muted">{{ GAME_TYPE_INFO[room.gameType]?.name }}
+              <template v-if="room.gameType === 'TANK'"> · {{ room.settings?.customSettings?.tankMode === 'ASSAULT' ? 'Đột kích · Hợp tác PvE' : 'Đấu trường cổ điển' }}</template>
+            </p>
           </div>
         </div>
         <span class="badge status-waiting">{{ room.status }}</span>

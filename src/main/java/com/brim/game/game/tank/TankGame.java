@@ -16,7 +16,20 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
     private final double tankSpeed;
     private final double bulletSpeed;
     private final long tickRateMs;
-    private final TankMaps.Layout mapLayout;
+    private TankMaps.Layout mapLayout;
+    private final Mode mode;
+    public static final int BLAST_RADIUS = 120;
+    public static final int SHELL_RANGE = 700;
+    private final List<Infantry> infantry = new ArrayList<>();
+    private final List<Explosion> explosions = new ArrayList<>();
+    private int wave;
+    private int waveDelay = 60;
+    private long explosionSequence;
+    private int[] navigation;
+    private static final int NAV_CELL = 40;
+    public enum Mode { CLASSIC, ASSAULT;
+        public static Mode parse(String value) { return "ASSAULT".equalsIgnoreCase(value) ? ASSAULT : CLASSIC; }
+    }
 
     private final Map<String, Tank> tanks = new ConcurrentHashMap<>();
     private final List<Bullet> bullets = Collections.synchronizedList(new ArrayList<>());
@@ -32,6 +45,11 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
     }
 
     public TankGame(String roomId, int mapWidth, int mapHeight, double tankSpeed, double bulletSpeed, long tickRateMs, String mapId) {
+        this(roomId, mapWidth, mapHeight, tankSpeed, bulletSpeed, tickRateMs, mapId, "CLASSIC");
+    }
+
+    public TankGame(String roomId, int mapWidth, int mapHeight, double tankSpeed, double bulletSpeed, long tickRateMs, String mapId, String mode) {
+        this.mode = Mode.parse(mode);
         this.mapLayout = TankMaps.parse(mapId);
         this.roomId = roomId;
         this.mapWidth = mapWidth;
@@ -56,6 +74,8 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
     public synchronized void handleInput(String playerId, TankInput input) {
         Tank tank = tanks.get(playerId);
         if (tank != null && tank.isAlive()) {
+            if (input != null && ((input.targetX != null && !Double.isFinite(input.targetX))
+                    || (input.targetY != null && !Double.isFinite(input.targetY)))) return;
             tank.setInput(input);
             tank.lastInputAt = System.currentTimeMillis();
         }
@@ -74,7 +94,9 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         if (state != GameState.IN_PROGRESS) return state;
 
         if (++botDecisionTick % 3 == 0) updateBots();
-        respawnBotsIfReady();
+        explosions.removeIf(e -> e.expiresAt < now);
+        if (mode == Mode.ASSAULT) updateAssault();
+        else respawnBotsIfReady();
         updateTanks();
         updateBullets();
         checkCollisions();
@@ -92,7 +114,7 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
             Tank closestEnemy = null;
             double minDist = Double.MAX_VALUE;
             for (Tank other : tanks.values()) {
-                if (other == botTank || !other.isAlive()) continue;
+                if (other == botTank || !other.isAlive() || (mode == Mode.ASSAULT && other.playerId.startsWith("bot-"))) continue;
                 double dist = Math.hypot(other.getX() - botTank.getX(), other.getY() - botTank.getY());
                 if (dist < minDist) {
                     minDist = dist;
@@ -167,6 +189,9 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
                 }
             }
 
+            if (mode == Mode.ASSAULT) {
+                input.targetX = closestEnemy.x; input.targetY = closestEnemy.y;
+            }
             botTank.setInput(input);
         }
     }
@@ -177,15 +202,19 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
 
             if (!tank.playerId.startsWith("bot-") && System.currentTimeMillis() - tank.lastInputAt > 750) tank.input = null;
             TankInput input = tank.getInput();
+            tank.updateCooldown();
             if (input == null) return;
+            if (mode == Mode.ASSAULT && input.targetX != null && input.targetY != null)
+                tank.turretAngle = Math.atan2(input.targetY - tank.y, input.targetX - tank.x);
+            else tank.turretAngle = tank.angle;
 
             // Rotation
-            if (input.turnLeft()) tank.setAngle(tank.getAngle() - 0.1);
-            if (input.turnRight()) tank.setAngle(tank.getAngle() + 0.1);
+            if (input.turnLeft()) tank.setAngle(tank.getAngle() - (mode == Mode.ASSAULT ? 0.15 : 0.1));
+            if (input.turnRight()) tank.setAngle(tank.getAngle() + (mode == Mode.ASSAULT ? 0.15 : 0.1));
 
             // Movement
             double dx = 0, dy = 0;
-            double movementSpeed = tankSpeed * (tank.speedUntil > System.currentTimeMillis() ? 1.35 : 1);
+            double movementSpeed = tankSpeed * (mode == Mode.ASSAULT ? 1.8 + tank.engineLevel * .18 : 1) * (tank.speedUntil > System.currentTimeMillis() ? 1.35 : 1);
             if (input.forward()) {
                 dx = Math.cos(tank.getAngle()) * movementSpeed;
                 dy = Math.sin(tank.getAngle()) * movementSpeed;
@@ -208,7 +237,6 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
                 shoot(tank);
             }
 
-            tank.updateCooldown();
         });
     }
 
@@ -216,8 +244,24 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         Iterator<Bullet> it = bullets.iterator();
         while (it.hasNext()) {
             Bullet bullet = it.next();
-            bullet.setX(bullet.getX() + Math.cos(bullet.getAngle()) * bulletSpeed);
-            bullet.setY(bullet.getY() + Math.sin(bullet.getAngle()) * bulletSpeed);
+            if (bullet.shell) {
+                double distance = Math.hypot(bullet.targetX - bullet.x, bullet.targetY - bullet.y);
+                double step = Math.min(distance, bulletSpeed * 1.8);
+                double nx = distance <= step ? bullet.targetX : bullet.x + Math.cos(bullet.angle) * step;
+                double ny = distance <= step ? bullet.targetY : bullet.y + Math.sin(bullet.angle) * step;
+                double hit = Double.POSITIVE_INFINITY;
+                for (Wall wall : walls) hit = Math.min(hit, wall.hitFraction(bullet.x, bullet.y, nx, ny, 5));
+                if (hit <= 1 || distance <= step || bullet.life <= 1) {
+                    double fraction = Math.min(1, hit);
+                    detonate(bullet, bullet.x + (nx - bullet.x) * fraction, bullet.y + (ny - bullet.y) * fraction);
+                    it.remove();
+                    continue;
+                }
+                bullet.x = nx; bullet.y = ny; bullet.life--;
+                continue;
+            }
+            bullet.setX(bullet.getX() + Math.cos(bullet.getAngle()) * bulletSpeed * (bullet.shell ? 1.8 : 1));
+            bullet.setY(bullet.getY() + Math.sin(bullet.getAngle()) * bulletSpeed * (bullet.shell ? 1.8 : 1));
             bullet.setLife(bullet.getLife() - 1);
 
             if (bullet.getLife() <= 0 || bullet.getX() < 0 || bullet.getX() > mapWidth
@@ -233,6 +277,7 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         bulletLoop:
         while (bit.hasNext()) {
             Bullet bullet = bit.next();
+            if (bullet.shell) continue;
             for (Tank tank : tanks.values()) {
                 if (tank.getPlayerId().equals(bullet.getOwnerId()) || !tank.isAlive()) continue;
 
@@ -272,13 +317,13 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
                 HealthPack item = items.next();
                 boolean pickedUp = false;
                 for (Tank tank : tanks.values()) {
-                    if (!tank.isAlive() || (item.type == ItemType.HEALTH && tank.getHealth() >= 100)) continue;
+                    if (!tank.isAlive() || (item.type == ItemType.HEALTH && tank.getHealth() >= tank.maxHealth)) continue;
                     double dx = tank.getX() - item.getX();
                     double dy = tank.getY() - item.getY();
                     if (dx * dx + dy * dy <= Math.pow(tank.getRadius() + item.getRadius(), 2)) {
                         long now = System.currentTimeMillis();
                         switch (item.type) {
-                            case HEALTH -> tank.setHealth(Math.min(100, tank.getHealth() + item.getHealAmount()));
+                            case HEALTH -> tank.setHealth(Math.min(tank.maxHealth, tank.getHealth() + item.getHealAmount()));
                             case SHIELD -> tank.shieldUntil = now + 10_000;
                             case SPEED -> tank.speedUntil = now + 6000;
                             case RAPID_FIRE -> tank.rapidFireUntil = now + 6000;
@@ -311,7 +356,12 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         String color = tank.color;
         Tank fresh = new Tank(playerId, generateSpawnPosition());
         fresh.color = color;
-        // A respawn starts a fresh run on the map; score is intentionally reset.
+        if (mode == Mode.ASSAULT) {
+            fresh.engineLevel = tank.engineLevel; fresh.cannonLevel = tank.cannonLevel; fresh.armorLevel = tank.armorLevel;
+            fresh.maxHealth = tank.maxHealth; fresh.health = tank.maxHealth; fresh.credits = tank.credits; fresh.score = tank.score;
+            fresh.shieldUntil = System.currentTimeMillis() + 3000;
+        }
+        // Classic respawns start a fresh run.
         tanks.put(playerId, fresh);
         return true;
     }
@@ -325,11 +375,181 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
 
     private void shoot(Tank tank) {
         if (bullets.size() >= 512) return;
-        double bx = tank.getX() + Math.cos(tank.getAngle()) * (tank.getRadius() + 10);
-        double by = tank.getY() + Math.sin(tank.getAngle()) * (tank.getRadius() + 10);
-        bullets.add(new Bullet(bx, by, tank.getAngle(), tank.getPlayerId()));
+        double angle = mode == Mode.ASSAULT ? tank.turretAngle : tank.angle;
+        double bx = tank.x + Math.cos(angle) * (tank.radius + 10);
+        double by = tank.y + Math.sin(angle) * (tank.radius + 10);
+        Bullet bullet = new Bullet(bx, by, angle, tank.playerId);
+        if (mode == Mode.ASSAULT) {
+            TankInput input = tank.input;
+            double tx = input.targetX == null ? tank.x + Math.cos(angle) * 450 : input.targetX;
+            double ty = input.targetY == null ? tank.y + Math.sin(angle) * 450 : input.targetY;
+            tx = Math.max(25, Math.min(mapWidth - 25, tx)); ty = Math.max(25, Math.min(mapHeight - 25, ty));
+            double distance = Math.hypot(tx - tank.x, ty - tank.y);
+            double range = Math.min(distance, SHELL_RANGE);
+            bullet.angle = Math.atan2(ty - tank.y, tx - tank.x);
+            bullet.x = tank.x; bullet.y = tank.y;
+            bullet.targetX = tank.x + Math.cos(bullet.angle) * range;
+            bullet.targetY = tank.y + Math.sin(bullet.angle) * range;
+            bullet.shell = true; bullet.damage = 70 + tank.cannonLevel * 15;
+        }
+        bullets.add(bullet);
         tank.resetShootCooldown();
     }
+
+    public synchronized boolean upgrade(String playerId, String branch) {
+        Tank tank = tanks.get(playerId);
+        if (mode != Mode.ASSAULT || state != GameState.IN_PROGRESS || tank == null || !tank.alive || branch == null) return false;
+        int level = switch (branch) { case "ENGINE" -> tank.engineLevel; case "CANNON" -> tank.cannonLevel; case "ARMOR" -> tank.armorLevel; default -> -1; };
+        if (level < 0 || level >= 3 || tank.credits < (level + 1) * 100) return false;
+        tank.credits -= (level + 1) * 100;
+        switch (branch) {
+            case "ENGINE" -> tank.engineLevel++;
+            case "CANNON" -> tank.cannonLevel++;
+            case "ARMOR" -> { tank.armorLevel++; tank.maxHealth += 35; tank.health += 35; }
+        }
+        return true;
+    }
+
+    public static int blastDamage(double distance, int damage) {
+        if (!Double.isFinite(distance) || distance >= BLAST_RADIUS) return 0;
+        return (int) Math.ceil(damage * (1 - Math.max(0, distance) / BLAST_RADIUS));
+    }
+
+    private void detonate(Bullet bullet, double x, double y) {
+        explosions.add(new Explosion(++explosionSequence, x, y, BLAST_RADIUS, System.currentTimeMillis() + 650));
+        Tank owner = tanks.get(bullet.ownerId);
+        boolean enemy = bullet.ownerId.startsWith("bot-");
+        for (Tank target : tanks.values()) {
+            if (!target.alive || (target != owner && target.playerId.startsWith("bot-") == enemy)) continue;
+            int damage = blastDamage(Math.hypot(target.x - x, target.y - y), bullet.damage);
+            if (damage <= 0) continue;
+            target.takeDamage(damage);
+            if (!target.alive) {
+                target.diedAt = System.currentTimeMillis();
+                if (owner != null && target != owner) { owner.increaseScore(100); owner.credits += 100; }
+            }
+        }
+        if (!enemy) for (Infantry unit : infantry) {
+            if (unit.health <= 0) continue;
+            int damage = blastDamage(Math.hypot(unit.x - x, unit.y - y), bullet.damage);
+            unit.health = Math.max(0, unit.health - damage);
+            if (damage > 0 && unit.health == 0 && owner != null) { owner.increaseScore(25); owner.credits += 25; }
+        }
+    }
+
+    private void updateAssault() {
+        infantry.removeIf(i -> i.health <= 0);
+        boolean humansAlive = tanks.values().stream().anyMatch(t -> t.alive && !t.playerId.startsWith("bot-"));
+        if (!humansAlive) return;
+        boolean clear = infantry.isEmpty() && tanks.values().stream().noneMatch(t -> t.alive && t.playerId.startsWith("bot-"));
+        if (clear && --waveDelay <= 0) {
+            wave++;
+            tanks.values().removeIf(t -> t.playerId.startsWith("bot-"));
+            if (wave > 1) tanks.values().forEach(t -> { t.credits += 75; t.health = Math.min(t.maxHealth, t.health + 30); });
+            if (wave > 1 && (wave - 1) % 3 == 0) {
+                mapLayout = TankMaps.Layout.values()[(mapLayout.ordinal() + 1) % TankMaps.Layout.values().length];
+                walls.clear(); generateWalls(); bullets.clear(); healthPacks.clear(); explosions.clear(); navigation = null;
+                tanks.values().forEach(t -> { Position p = generateSpawnPosition(); t.x = p.x; t.y = p.y; });
+                spawnHealthPacks();
+            }
+            int count = Math.min(30, 5 + wave * 2);
+            for (int n = 0; n < count; n++) {
+                Position p = enemySpawn();
+                infantry.add(new Infantry("inf-" + wave + "-" + n, p.x, p.y, 45 + Math.min(45, wave * 3), 30 + n % 20));
+            }
+            for (int n = 0; n < Math.min(5, 1 + wave / 2); n++) {
+                Position p = enemySpawn();
+                Tank bot = new Tank("bot-wave-" + wave + "-" + n, p);
+                bot.color = "#ce654b"; tanks.put(bot.playerId, bot);
+            }
+            waveDelay = 100;
+        }
+        if (navigation == null || botDecisionTick % 10 == 0) updateNavigation();
+        for (Infantry unit : infantry) {
+            Tank target = tanks.values().stream().filter(t -> t.alive && !t.playerId.startsWith("bot-"))
+                    .min(Comparator.comparingDouble(t -> Math.hypot(t.x - unit.x, t.y - unit.y))).orElse(null);
+            if (target == null) continue;
+            double distance = Math.hypot(target.x - unit.x, target.y - unit.y);
+            double angle = Math.atan2(target.y - unit.y, target.x - unit.x);
+            boolean blocked = !lineClear(unit.x, unit.y, target.x, target.y, 12);
+            if (distance > 150 || blocked) {
+                if (blocked) {
+                    int cols = (mapWidth + NAV_CELL - 1) / NAV_CELL;
+                    int cell = Math.min(navigation.length - 1, (int) unit.y / NAV_CELL * cols + (int) unit.x / NAV_CELL);
+                    int next = cell;
+                    for (int neighbor : new int[]{cell - cols, cell + cols, cell % cols > 0 ? cell - 1 : -1, cell % cols < cols - 1 ? cell + 1 : -1})
+                        if (neighbor >= 0 && neighbor < navigation.length && navigation[neighbor] < navigation[next]) next = neighbor;
+                    if (next != cell) angle = Math.atan2((next / cols + .5) * NAV_CELL - unit.y, (next % cols + .5) * NAV_CELL - unit.x);
+                }
+                double speed = 1.8 + Math.min(1.2, wave * .08);
+                double nx = unit.x + Math.cos(angle) * speed, ny = unit.y + Math.sin(angle) * speed;
+                if (canMove(nx, ny, 9)) { unit.x = nx; unit.y = ny; }
+                else { // Slide along cover rather than walking through it.
+                    if (canMove(nx, unit.y, 9)) unit.x = nx;
+                    else if (canMove(unit.x, ny, 9)) unit.y = ny;
+                }
+            }
+            if (--unit.cooldown <= 0 && distance < 310) {
+                boolean cover = !lineClear(unit.x, unit.y, target.x, target.y, 2);
+                if (!cover) {
+                    target.takeDamage(4 + Math.min(4, wave / 3));
+                    if (!target.alive) target.diedAt = System.currentTimeMillis();
+                }
+                unit.cooldown = 35;
+            }
+        }
+    }
+
+    private boolean lineClear(double x, double y, double tx, double ty, int radius) {
+        int steps = Math.max(1, (int) Math.ceil(Math.hypot(tx - x, ty - y) / 15));
+        for (Wall wall : walls) for (int step = 0; step <= steps; step++)
+            if (wall.intersects(x + (tx - x) * step / steps, y + (ty - y) * step / steps, radius)) return false;
+        return true;
+    }
+
+    /** Shared flow field lets squads find corridors around buildings without a search per soldier. */
+    private void updateNavigation() {
+        int cols = (mapWidth + NAV_CELL - 1) / NAV_CELL, rows = (mapHeight + NAV_CELL - 1) / NAV_CELL;
+        navigation = new int[cols * rows];
+        Arrays.fill(navigation, Integer.MAX_VALUE);
+        boolean[] blocked = new boolean[navigation.length];
+        for (int i = 0; i < navigation.length; i++) {
+            double x = (i % cols + .5) * NAV_CELL, y = (i / cols + .5) * NAV_CELL;
+            blocked[i] = x >= mapWidth - 12 || y >= mapHeight - 12 || walls.stream().anyMatch(w -> w.intersects(x, y, 12));
+        }
+        ArrayDeque<Integer> queue = new ArrayDeque<>();
+        for (Tank tank : tanks.values()) if (tank.alive && !tank.playerId.startsWith("bot-")) {
+            int cell = (int) tank.y / NAV_CELL * cols + (int) tank.x / NAV_CELL;
+            navigation[cell] = 0; queue.add(cell);
+        }
+        while (!queue.isEmpty()) {
+            int cell = queue.removeFirst();
+            for (int neighbor : new int[]{cell - cols, cell + cols, cell % cols > 0 ? cell - 1 : -1, cell % cols < cols - 1 ? cell + 1 : -1}) {
+                if (neighbor < 0 || neighbor >= navigation.length || blocked[neighbor] || navigation[neighbor] != Integer.MAX_VALUE) continue;
+                navigation[neighbor] = navigation[cell] + 1; queue.addLast(neighbor);
+            }
+        }
+    }
+
+    private Position enemySpawn() {
+        Position p = generateSpawnPosition();
+        for (int attempt = 0; attempt < 60; attempt++) {
+            Position candidate = generateSpawnPosition();
+            if (tanks.values().stream().filter(t -> t.alive && !t.playerId.startsWith("bot-"))
+                    .allMatch(t -> Math.hypot(t.x - candidate.x, t.y - candidate.y) > 450)) return candidate;
+            p = candidate;
+        }
+        return p;
+    }
+
+    @Data @lombok.AllArgsConstructor
+    public static class Infantry {
+        private final String id;
+        private double x, y;
+        private int health;
+        private int cooldown;
+    }
+    public record Explosion(long id, double x, double y, int radius, long expiresAt) {}
 
     private boolean canMove(double x, double y, double radius) {
         return canMove(x, y, radius, null);
@@ -382,15 +602,30 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
             Tank copy = new Tank(tank.playerId, new Position(0, 0));
             copy.x = tank.x; copy.y = tank.y;
             copy.color = tank.color; copy.angle = tank.angle; copy.health = tank.health;
+            copy.turretAngle = tank.turretAngle; copy.maxHealth = tank.maxHealth; copy.credits = tank.credits;
+            copy.engineLevel = tank.engineLevel; copy.cannonLevel = tank.cannonLevel; copy.armorLevel = tank.armorLevel;
             copy.score = tank.score; copy.alive = tank.alive; copy.diedAt = tank.diedAt;
             copy.shieldUntil = tank.shieldUntil; copy.speedUntil = tank.speedUntil; copy.rapidFireUntil = tank.rapidFireUntil;
             visible.put(tank.playerId, copy);
         }
         List<Bullet> visibleBullets = bullets.stream().filter(b -> area == null || area.contains(b.x, b.y))
-                .map(b -> { Bullet copy = new Bullet(b.x, b.y, b.angle, b.ownerId); copy.life = b.life; return copy; }).toList();
+                .map(b -> { Bullet copy = new Bullet(b.x, b.y, b.angle, b.ownerId); copy.life = b.life; copy.shell = b.shell; copy.targetX = b.targetX; copy.targetY = b.targetY; copy.damage = b.damage; return copy; }).toList();
         List<HealthPack> visibleItems = healthPacks.stream().filter(i -> area == null || area.contains(i.x, i.y)).toList();
         List<Wall> visibleWalls = walls.stream().filter(w -> area == null || area.intersects(w.x, w.y, w.width, w.height)).toList();
-        return new TankGameState(visible, visibleBullets, visibleItems, visibleWalls, state, mapWidth, mapHeight);
+        return new TankGameState(visible, visibleBullets, visibleItems, visibleWalls, state, mapWidth, mapHeight, mode, mapLayout.name(), wave,
+                (int) infantry.stream().filter(i -> i.health > 0).count() + (int) tanks.values().stream().filter(t -> t.alive && t.playerId.startsWith("bot-")).count(),
+                waveDelay, infantry.stream().filter(i -> area == null || area.contains(i.x, i.y)).map(i -> new Infantry(i.id, i.x, i.y, i.health, i.cooldown)).toList(),
+                explosions.stream().filter(e -> area == null || area.intersects(e.x - BLAST_RADIUS, e.y - BLAST_RADIUS, BLAST_RADIUS * 2, BLAST_RADIUS * 2)).toList(), enemyMarkers());
+    }
+
+    public record EnemyMarker(double x, double y) {}
+    private List<EnemyMarker> enemyMarkers() {
+        if (mode != Mode.ASSAULT) return List.of();
+        List<EnemyMarker> markers = new ArrayList<>();
+        infantry.stream().filter(i -> i.health > 0).forEach(i -> markers.add(new EnemyMarker(i.x, i.y)));
+        tanks.values().stream().filter(t -> t.alive && t.playerId.startsWith("bot-"))
+                .forEach(t -> markers.add(new EnemyMarker(t.x, t.y)));
+        return markers;
     }
 
     public enum GameState { WAITING, IN_PROGRESS, FINISHED }
@@ -401,6 +636,9 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         private String color = "#2ecc71";
         private double x, y;
         private double angle = 0;
+        private double turretAngle;
+        private int maxHealth = 100;
+        private int credits, engineLevel, cannonLevel, armorLevel;
         private int health = 100;
         private int score = 0;
         private boolean alive = true;
@@ -421,6 +659,7 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         public boolean canShoot() { return shootCooldown <= 0; }
         public void resetShootCooldown() {
             int base = playerId.startsWith("bot-") ? 18 : SHOOT_COOLDOWN_MAX;
+            base = Math.max(4, base - cannonLevel);
             shootCooldown = rapidFireUntil > System.currentTimeMillis() ? Math.max(3, base / 2) : base;
         }
         public void updateCooldown() { if (shootCooldown > 0) shootCooldown--; }
@@ -438,7 +677,9 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         private double angle;
         private final String ownerId;
         private int life = 60;
-        private final int damage = 25;
+        private int damage = 25;
+        private boolean shell;
+        private double targetX, targetY;
 
         public Bullet(double x, double y, double angle, String ownerId) {
             this.x = x; this.y = y; this.angle = angle; this.ownerId = ownerId;
@@ -461,6 +702,23 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
     public static class Wall {
         private final int x, y, width, height;
 
+        /** Earliest contact along a swept shell segment; thin walls cannot be skipped between ticks. */
+        public double hitFraction(double fromX, double fromY, double toX, double toY, double radius) {
+            double enter = 0, exit = 1;
+            double[] origin = {fromX, fromY}, delta = {toX - fromX, toY - fromY};
+            double[] min = {x - radius, y - radius}, max = {x + width + radius, y + height + radius};
+            for (int axis = 0; axis < 2; axis++) {
+                if (Math.abs(delta[axis]) < 1e-9) {
+                    if (origin[axis] < min[axis] || origin[axis] > max[axis]) return Double.POSITIVE_INFINITY;
+                } else {
+                    double near = (min[axis] - origin[axis]) / delta[axis], far = (max[axis] - origin[axis]) / delta[axis];
+                    enter = Math.max(enter, Math.min(near, far)); exit = Math.min(exit, Math.max(near, far));
+                    if (enter > exit) return Double.POSITIVE_INFINITY;
+                }
+            }
+            return enter;
+        }
+
         public boolean intersects(double px, double py, double radius) {
             double closestX = Math.max(x, Math.min(px, x + width));
             double closestY = Math.max(y, Math.min(py, y + height));
@@ -476,6 +734,7 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
     @Data
     public static class TankInput {
         private boolean movingForward, movingBackward, turningLeft, turningRight, shooting;
+        private Double targetX, targetY;
 
         public boolean forward() { return movingForward; }
         public boolean backward() { return movingBackward; }
@@ -493,6 +752,12 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         private final GameState state;
         private final int mapWidth;
         private final int mapHeight;
+        private final Mode mode;
+        private final String mapId;
+        private final int wave, enemiesRemaining, nextWaveTicks;
+        private final List<Infantry> infantry;
+        private final List<Explosion> explosions;
+        private final List<EnemyMarker> enemyMarkers;
         private final long serverTime = System.currentTimeMillis();
     }
 }

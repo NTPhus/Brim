@@ -1,6 +1,7 @@
-export type GameTypeCode = 'SNAKE' | 'TANK' | 'CHESS' | 'CHINESE_CHESS' | 'CONNECT_FOUR' | 'CARO' | 'OTHELLO' | 'BATTLESHIP' | 'MATCH_THREE' | 'BOMBERMAN' | 'WARLORDS_CAMPAIGN' | 'WARLORDS_DUEL'
+export type GameTypeCode = 'VIETNAM_CAMPAIGN' | 'SNAKE' | 'TANK' | 'CHESS' | 'CHINESE_CHESS' | 'CONNECT_FOUR' | 'CARO' | 'OTHELLO' | 'BATTLESHIP' | 'MATCH_THREE' | 'BOMBERMAN' | 'WARLORDS_CAMPAIGN' | 'WARLORDS_DUEL'
 
 export const GameType = {
+  VIETNAM_CAMPAIGN: 'VIETNAM_CAMPAIGN',
   SNAKE: 'SNAKE',
   TANK: 'TANK',
   CHESS: 'CHESS',
@@ -10,6 +11,7 @@ export const GameType = {
 } as const
 
 export const GAME_TYPE_INFO: Record<GameTypeCode, { name: string; icon: string; realTime: boolean; solo?: boolean }> = {
+  VIETNAM_CAMPAIGN: { name: 'Dấu chân Việt · Chiến dịch', icon: '★', realTime: true, solo: true },
   SNAKE: { name: 'Rắn Săn Mồi', icon: '🐍', realTime: true },
   TANK: { name: 'Tank Battle', icon: '🚜', realTime: true },
   CHESS: { name: 'Cờ Vua', icon: '♟️', realTime: false },
@@ -99,7 +101,9 @@ export interface CreateRoomRequest {
   hostId?: string
   hostUsername?: string
   difficulty?: 'EASY' | 'MEDIUM' | 'HARD'
-  mapId?: 'ARENA' | 'WAREHOUSE' | 'CROSSROADS'
+  mapId?: import('@/game/tank/maps').TankMapId
+  vietnamChapter?: number
+  tankMode?: 'CLASSIC' | 'ASSAULT'
 }
 
 export interface JoinRoomRequest {

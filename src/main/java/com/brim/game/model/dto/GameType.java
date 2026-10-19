@@ -1,6 +1,7 @@
 package com.brim.game.model.dto;
 
 public enum GameType {
+    VIETNAM_CAMPAIGN("vietnam_campaign", "Dấu chân Việt — Chiến dịch", true),
     SNAKE("snake", "Rắn săn mồi", true),
     TANK("tank", "Tank Battle", true),
     CHESS("chess", "Cờ vua", false),
@@ -27,7 +28,7 @@ public enum GameType {
     public String getCode() { return code; }
     public String getName() { return name; }
     public boolean isRealTime() { return realTime; }
-    public boolean isSolo() { return this == MATCH_THREE || this == WARLORDS_CAMPAIGN; }
+    public boolean isSolo() { return this == VIETNAM_CAMPAIGN || this == MATCH_THREE || this == WARLORDS_CAMPAIGN; }
     public int minimumPlayers() { return isSolo() || this == SNAKE || this == TANK ? 1 : 2; }
     public int maximumPlayers() { return isSolo() ? 1 : this == BOMBERMAN ? 4 : realTime ? 16 : 2; }
 

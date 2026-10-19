@@ -76,7 +76,7 @@ public class TankGameController {
         if (headers.getSessionId() != null) WebSocketEventListener.bindSession(headers.getSessionId(), roomId, player.getId());
 
         TankGame game = activeGames.computeIfAbsent(roomId, k -> new TankGame(
-                roomId, Math.max(800, worldWidth), Math.max(600, worldHeight), 5, 15, 50, String.valueOf(room.getSettings().getCustomSettings().getOrDefault("mapId", "ARENA"))
+                roomId, Math.max(800, worldWidth), Math.max(600, worldHeight), 5, 15, 50, String.valueOf(room.getSettings().getCustomSettings().getOrDefault("mapId", "ARENA")), String.valueOf(room.getSettings().getCustomSettings().getOrDefault("tankMode", "CLASSIC"))
         ));
         if (!game.getTanks().containsKey(player.getId())) {
             game.addPlayer(player);
@@ -102,6 +102,14 @@ public class TankGameController {
 
         game.handleInput(message.getPlayerId(), message.getPayload());
     }
+
+    @MessageMapping("/tank/{roomId}/upgrade")
+    public void upgrade(@DestinationVariable String roomId, GameMessage<UpgradePayload> message) {
+        TankGame game = activeGames.get(roomId);
+        if (game != null && message.getPayload() != null && game.upgrade(message.getPlayerId(), message.getPayload().branch()))
+            broadcastGameState(roomId, null);
+    }
+    public record UpgradePayload(String branch) {}
 
     @MessageMapping("/tank/{roomId}/color")
     public void playerColor(@DestinationVariable String roomId, GameMessage<ColorPayload> message) {
@@ -165,11 +173,11 @@ public class TankGameController {
         // Always initialize fresh game
         TankGame previous = activeGames.get(roomId);
         if (previous != null) previous.setState(TankGame.GameState.FINISHED);
-        TankGame game = new TankGame(roomId, Math.max(800, worldWidth), Math.max(600, worldHeight), 5, 15, 50, String.valueOf(room.getSettings().getCustomSettings().getOrDefault("mapId", "ARENA")));
+        TankGame game = new TankGame(roomId, Math.max(800, worldWidth), Math.max(600, worldHeight), 5, 15, 50, String.valueOf(room.getSettings().getCustomSettings().getOrDefault("mapId", "ARENA")), String.valueOf(room.getSettings().getCustomSettings().getOrDefault("tankMode", "CLASSIC")));
         for (Player p : room.getPlayers()) {
-            game.addPlayer(p);
+            if (game.getMode() == TankGame.Mode.CLASSIC || !p.getId().startsWith("bot-")) game.addPlayer(p);
         }
-        addAutomaticBots(game, 4);
+        if (game.getMode() == TankGame.Mode.CLASSIC) addAutomaticBots(game, 4);
         game.setState(TankGame.GameState.IN_PROGRESS);
         activeGames.put(roomId, game);
 

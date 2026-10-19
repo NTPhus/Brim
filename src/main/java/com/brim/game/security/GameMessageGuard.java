@@ -26,7 +26,7 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class GameMessageGuard implements ChannelInterceptor {
-    private static final Pattern ACTION = Pattern.compile("^/app/(snake|tank|turn)/([a-zA-Z0-9-]{1,64})/(join|ready|move|input|color|restart|respawn)$");
+    private static final Pattern ACTION = Pattern.compile("^/app/(snake|tank|turn)/([a-zA-Z0-9-]{1,64})/(join|ready|move|input|color|restart|respawn|upgrade)$");
     private static final Pattern TOPIC = Pattern.compile("^/topic/(room|game)/([a-zA-Z0-9-]{1,64})/(state(?:/[a-zA-Z0-9-]{1,64})?|started|over|error|deleted)$");
     private final RoomAccess access;
     private final RequestLimits limits;
@@ -73,11 +73,12 @@ public class GameMessageGuard implements ChannelInterceptor {
         access.gameKind(room, kind);
         boolean validAction = kind.equals("turn") ? Set.of("join", "ready", "move", "restart").contains(action)
                 : Set.of("join", "ready", "color", "restart", "respawn", kind.equals("tank") ? "input" : "move").contains(action);
+        if (kind.equals("tank") && action.equals("upgrade")) validAction = true;
         if (!validAction) RoomAccess.deny();
         if (action.equals("restart")) access.host(roomId, guest.id());
         boolean input = action.equals("input") || action.equals("move");
         if (!limits.allow((input && !kind.equals("turn") ? "input:" : "control:") + guest.id(),
-                input && (!kind.equals("turn") || room.getGameType() == GameType.BOMBERMAN) ? 60 : 12, input && (!kind.equals("turn") || room.getGameType() == GameType.BOMBERMAN) ? 30 : 4)) RoomAccess.deny();
+                input && (!kind.equals("turn") || (room.getGameType() == GameType.BOMBERMAN || room.getGameType() == GameType.VIETNAM_CAMPAIGN)) ? 60 : 12, input && (!kind.equals("turn") || (room.getGameType() == GameType.BOMBERMAN || room.getGameType() == GameType.VIETNAM_CAMPAIGN)) ? 30 : 4)) RoomAccess.deny();
         try {
             if (!(message.getPayload() instanceof byte[] bytes) || bytes.length > 4096) RoomAccess.deny();
             var tree = mapper.readTree((byte[]) message.getPayload());

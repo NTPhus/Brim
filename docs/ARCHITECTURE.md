@@ -1,5 +1,7 @@
 # Kiến trúc và cách mở rộng game
 
+Tài liệu này mô tả triển khai hiện tại. Xem [kế hoạch kiến trúc nền tảng và game services](ARCHITECTURE_ROADMAP.md) cho kiến trúc hướng đích, vai trò Kafka, ownership và lộ trình chuyển đổi.
+
 ## Luồng đang triển khai
 
 ```mermaid

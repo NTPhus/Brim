@@ -5,6 +5,8 @@ import { useGameSession } from '@/stores/gameSession'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/vietnam', name: 'vietnam-hub', component: () => import('@/views/VietnamHubView.vue') },
+    { path: '/game/vietnam/:roomId', name: 'vietnam-campaign', meta: { gameViewport: true }, component: () => import('@/views/VietnamGameView.vue') },
     { path: '/warlords', name: 'warlords-hub', component: () => import('@/views/WarlordsHubView.vue') },
     { path: '/game/warlords-campaign/:roomId', name: 'warlords-campaign', meta: { gameViewport: true }, component: () => import('@/views/WarlordsGameView.vue'), props: { mode: 'CAMPAIGN' } },
     { path: '/game/warlords-duel/:roomId', name: 'warlords-duel', meta: { gameViewport: true }, component: () => import('@/views/WarlordsGameView.vue'), props: { mode: 'DUEL' } },

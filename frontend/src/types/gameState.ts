@@ -38,6 +38,12 @@ export interface SnakeGameState {
  * Tank game state (mirrors backend TankGame.TankGameState)
  */
 export interface TankTank {
+  turretAngle: number
+  maxHealth: number
+  credits: number
+  engineLevel: number
+  cannonLevel: number
+  armorLevel: number
   playerId: string
   color?: string
   x: number
@@ -55,6 +61,9 @@ export interface TankTank {
 }
 
 export interface TankBullet {
+  shell: boolean
+  targetX: number
+  targetY: number
   x: number
   y: number
   angle: number
@@ -87,6 +96,14 @@ export interface TankInput {
 }
 
 export interface TankGameState {
+  enemyMarkers: { x: number; y: number }[]
+  mode: 'CLASSIC' | 'ASSAULT'
+  mapId: string
+  wave: number
+  enemiesRemaining: number
+  nextWaveTicks: number
+  infantry: { id: string; x: number; y: number; health: number; cooldown: number }[]
+  explosions: { id: number; x: number; y: number; radius: number; expiresAt: number }[]
   serverTime?: number
   tanks: Record<string, TankTank>
   bullets: TankBullet[]

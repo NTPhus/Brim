@@ -36,7 +36,7 @@ export function useBoardSession<T extends { currentPlayer?: string; status?: str
   }
   function move(payload: unknown) {
     if (pending.value || finished.value) return
-    if (publish('move', payload) && kind !== 'BOMBERMAN') {
+    if (publish('move', payload) && kind !== 'BOMBERMAN' && kind !== 'VIETNAM_CAMPAIGN') {
       pending.value = true
       timer = window.setTimeout(() => { pending.value = false; error.value = 'Chưa nhận được phản hồi hoặc nước đi không hợp lệ.' }, 4000)
     }

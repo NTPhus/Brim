@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { TANK_MAPS } from '@/game/tank/maps'
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAllRooms, createRoom, joinRoom, getLeaderboard } from '@/api/rooms'
@@ -28,7 +29,8 @@ const newRoom = ref<CreateRoomRequest>({
   gameType: 'SNAKE',
   maxPlayers: 2,
   difficulty: 'MEDIUM',
-  mapId: 'ARENA'
+  mapId: 'ARENA',
+  tankMode: 'ASSAULT'
 })
 
 const isBoardGame = computed(() => !GAME_TYPE_INFO[newRoom.value.gameType].realTime)
@@ -153,6 +155,10 @@ function statusLabel(status: string) {
     </section>
 
     <section class="warlords-entry">
+      <div><span class="eyebrow">GAME CHIẾN DỊCH RIÊNG · HÀNH ĐỘNG THỜI GIAN THỰC</span><h2>DẤU CHÂN VIỆT</h2><p>Điện Biên Phủ · Địa đạo Củ Chi · Tiến vào Dinh. Nhập vai bộ binh và kíp xe tăng, chiến đấu cùng đồng đội AI, khám phá bối cảnh lịch sử qua từng màn.</p></div>
+      <button @click="router.push('/vietnam')">Mở chiến dịch →</button>
+    </section>
+    <section class="warlords-entry">
       <div><span class="eyebrow">GAME MỚI · MATCH-3 CHIẾN ĐẤU</span><h2>⚔ Sơn Hà — Hợp cờ Hoa Lư</h2><p>Ghép kiếm hạ địch, tích năng lượng dùng kỹ năng. Đi 12 chương chiến dịch hoặc tạo bàn đấu tướng cùng bạn bè.</p></div>
       <button @click="router.push('/warlords')">Vào Sơn Hà →</button>
     </section>
@@ -246,11 +252,15 @@ function statusLabel(status: string) {
         <input v-model.number="newRoom.maxPlayers" type="number" :min="GAME_TYPE_INFO[newRoom.gameType].solo ? 1 : 2" :max="newRoom.gameType === 'BOMBERMAN' ? 4 : newRoom.gameType === 'SNAKE' ? 12 : 8" :disabled="isBoardGame" />
 
         <template v-if="newRoom.gameType === 'TANK'">
+          <label>Chế độ Tank</label>
+          <select v-model="newRoom.tankMode">
+            <option value="ASSAULT">Đột kích · Lính, đạn nổ lan & nâng cấp</option>
+            <option value="CLASSIC">Đấu trường cổ điển · Tank đối kháng</option>
+          </select>
+          <p v-if="newRoom.tankMode === 'ASSAULT'" class="mode-description">Hợp tác vượt các đợt địch, chuyển bản đồ sau mỗi 3 đợt. Bắn theo chuột, nhận tiếp tế để nâng cấp trong trận.</p>
           <label>Bản đồ Tank</label>
           <select v-model="newRoom.mapId">
-            <option value="ARENA">Arena · Đấu trường mở</option>
-            <option value="WAREHOUSE">Warehouse · Nhà kho</option>
-            <option value="CROSSROADS">Crossroads · Giao lộ</option>
+            <option v-for="(map, id) in TANK_MAPS" :key="id" :value="id">{{ map.name }} · {{ map.detail }}</option>
           </select>
         </template>
 

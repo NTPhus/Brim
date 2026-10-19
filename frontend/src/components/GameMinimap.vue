@@ -66,6 +66,10 @@ function draw() {
       context.fillStyle = '#4ade80'
       context.fillRect(sx(item.x) - 2, sy(item.y) - 2, 4, 4)
     }
+    for (const enemy of state.enemyMarkers ?? []) {
+      context.fillStyle = '#fb8067'
+      context.fillRect(sx(enemy.x) - 1.5, sy(enemy.y) - 1.5, 3, 3)
+    }
     for (const [id, tank] of Object.entries(state.tanks)) {
       context.fillStyle = id === props.playerId ? '#67e8f9' : (tank.alive ? '#fbbf24' : '#64748b')
       context.fillRect(sx(tank.x) - 2, sy(tank.y) - 2, 5, 5)

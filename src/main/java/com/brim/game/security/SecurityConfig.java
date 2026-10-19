@@ -29,7 +29,7 @@ public class SecurityConfig {
             .securityContext(context -> context.securityContextRepository(contexts))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/csrf", "/auth/guest", "/actuator/health", "/error").permitAll()
-                .requestMatchers("/auth/**", "/rooms/**", "/leaderboard", "/ws/**", "/warlords", "/warlords/**").authenticated()
+                .requestMatchers("/auth/**", "/rooms/**", "/leaderboard", "/ws/**", "/warlords", "/warlords/**", "/vietnam").authenticated()
                 .anyRequest().denyAll())
             .requestCache(cache -> cache.disable())
             .formLogin(form -> form.disable()).httpBasic(basic -> basic.disable()).logout(logout -> logout.disable())
