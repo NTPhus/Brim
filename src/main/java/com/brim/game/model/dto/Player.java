@@ -3,6 +3,7 @@ package com.brim.game.model.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 @Data
 @NoArgsConstructor
@@ -10,6 +11,8 @@ import lombok.NoArgsConstructor;
 public class Player {
     private String id;
     private String username;
+    // Accept legacy/incoming values, but never expose or persist a transport session ID.
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String sessionId;
     private int score;
     private boolean ready;

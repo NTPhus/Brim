@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,7 +16,7 @@ public class GameRoom {
     private String name;
     private GameType gameType;
     private RoomStatus status;
-    private List<Player> players = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private List<Player> players = new CopyOnWriteArrayList<>();
     private int maxPlayers;
     private String hostId;
     private GameSettings settings;
@@ -37,12 +38,12 @@ public class GameRoom {
     }
 
     public List<Player> getPlayers() {
-        if (players == null) players = new java.util.concurrent.CopyOnWriteArrayList<>();
+        if (players == null) players = new CopyOnWriteArrayList<>();
         return players;
     }
 
     public void setPlayers(List<Player> players) {
-        this.players = new java.util.concurrent.CopyOnWriteArrayList<>(players == null ? List.of() : players);
+        this.players = new CopyOnWriteArrayList<>(players == null ? List.of() : players);
     }
 
     public boolean canJoin() {

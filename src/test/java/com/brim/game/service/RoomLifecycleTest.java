@@ -67,7 +67,8 @@ class RoomLifecycleTest {
         context.registerBean(SimpMessagingTemplate.class, () -> mock(SimpMessagingTemplate.class));
         context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
         context.registerBean(TurnBasedGameRegistry.class, () -> registry);
-        context.register(RoomService.class, TurnBasedGameService.class, SnakeGameController.class, TankGameController.class);
+        context.register(RoomService.class, TurnBasedGameService.class, SnakeGameController.class, TankGameController.class,
+                com.brim.game.config.WebSocketEventListener.class);
         context.refresh();
         rooms = context.getBean(RoomService.class);
         runtime = context.getBean(GameRuntime.class);
@@ -149,6 +150,30 @@ class RoomLifecycleTest {
         room.getPlayers().removeIf(p -> p.getId().equals("human"));
         new RoomCleanupScheduler(rooms, context.getBean(TurnBasedGameService.class)).cleanupStaleRooms();
         assertNull(rooms.getRoom(room.getId()));
+        assertEquals(0, runtime.roomCount());
+    }
+
+    @Test void disconnectFromMultipleRoomsDeletesBothAndStopsTheirTicksAfterGrace() {
+        var listener = context.getBean(com.brim.game.config.WebSocketEventListener.class);
+        String socket = "lifecycle-socket";
+        GameRoom first = rooms.createRoom("First", GameType.SNAKE, "human", 4);
+        GameRoom second = rooms.createRoom("Second", GameType.TANK, "human", 4);
+        for (GameRoom room : List.of(first, second)) {
+            rooms.addBot(room.getId()); start(room);
+            com.brim.game.config.WebSocketEventListener.bindSession(socket, room.getId(), "human");
+        }
+        assertEquals(2, runtime.roomCount());
+        var headers = org.springframework.messaging.simp.stomp.StompHeaderAccessor.create(
+                org.springframework.messaging.simp.stomp.StompCommand.DISCONNECT);
+        headers.setSessionId(socket);
+        var message = org.springframework.messaging.support.MessageBuilder.createMessage(new byte[0], headers.getMessageHeaders());
+        listener.handleSessionDisconnect(new org.springframework.web.socket.messaging.SessionDisconnectEvent(
+                this, message, socket, org.springframework.web.socket.CloseStatus.NORMAL));
+        listener.expireDisconnectedPlayers();
+        assertEquals(2, runtime.roomCount(), "Keep the reconnect grace period");
+        ReflectionTestUtils.invokeMethod(listener, "expireDisconnectedPlayers", Long.MAX_VALUE);
+        assertNull(rooms.getRoom(first.getId()));
+        assertNull(rooms.getRoom(second.getId()));
         assertEquals(0, runtime.roomCount());
     }
 
