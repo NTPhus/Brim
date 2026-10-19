@@ -213,10 +213,17 @@ public class TankGameController {
         synchronized (game) {
             // Explicit leave or expired reconnect grace removes the corresponding avatar.
             var members = room.getPlayers().stream().map(Player::getId).collect(java.util.stream.Collectors.toSet());
-            game.getTanks().keySet().removeIf(id -> !id.startsWith("bot-") && !members.contains(id));
+            game.getTanks().keySet().stream().filter(id -> !id.startsWith("bot-") && !members.contains(id)).toList().forEach(game::removePlayer);
             game.update();
         }
         ++tick[0];
+        if (game.getState() == TankGame.GameState.FINISHED) {
+            return !runtime.tryPublish(roomId, () -> {
+                if (activeGames.get(roomId) != game) return;
+                broadcastGameState(roomId, null);
+                runtime.publishEvent(roomId, () -> publishScoreDeltas(roomId, game, scores));
+            });
+        }
         if (tick[0] % 2 == 0) {
             boolean scoreDue = tick[0] % 20 == 0;
             runtime.publish(roomId, () -> {
@@ -234,6 +241,11 @@ public class TankGameController {
         TankGame game = activeGames.get(roomId);
         var room = roomService.getRoom(roomId);
         if (game == null || room == null) return;
+        if (game.getState() == TankGame.GameState.FINISHED && room.getStatus() != com.brim.game.model.dto.RoomStatus.FINISHED) {
+            room.setStatus(com.brim.game.model.dto.RoomStatus.FINISHED);
+            roomService.saveRoom(room);
+            messagingTemplate.convertAndSend("/topic/room/" + roomId + "/state", room);
+        }
         for (Player player : room.getPlayers()) {
             if (!player.getId().startsWith("bot-")) {
                 messagingTemplate.convertAndSend("/topic/game/" + roomId + "/state/" + player.getId(), game.getGameState(player.getId()));

@@ -49,7 +49,7 @@ export function useBoardSession<T extends { currentPlayer?: string; status?: str
       if (nextRoom.gameType !== kind || nextRoom.status === 'WAITING') { await router.replace(`/room/${roomId}`); return }
       await stomp.connect()
       if (disposed) return
-      const destination = `/topic/game/${roomId}/state${kind === 'BATTLESHIP' ? `/${session.player.id}` : ''}`
+      const destination = `/topic/game/${roomId}/state${(kind === 'BATTLESHIP' || kind === 'VIETNAM_CAMPAIGN') ? `/${session.player.id}` : ''}`
       cleanup.push(
         stomp.subscribe<T>(destination, receive),
         stomp.subscribe<GameRoom>(`/topic/room/${roomId}/state`, next => { room.value = next; session.setCurrentRoom(next) }),
@@ -57,7 +57,7 @@ export function useBoardSession<T extends { currentPlayer?: string; status?: str
         stomp.subscribe<{ message: string }>(`/topic/game/${roomId}/error`, next => { error.value = next.message }),
         stomp.subscribe<GameMessage<string>>('/user/queue/errors', next => { error.value = next.payload; pending.value = false; window.clearTimeout(timer) })
       )
-      if (kind !== 'BATTLESHIP') cleanup.push(stomp.subscribe<GameMessage<{ finalState: T }>>(`/topic/game/${roomId}/over`, next => receive(next.payload.finalState)))
+      if (kind !== 'BATTLESHIP' && kind !== 'VIETNAM_CAMPAIGN') cleanup.push(stomp.subscribe<GameMessage<{ finalState: T }>>(`/topic/game/${roomId}/over`, next => receive(next.payload.finalState)))
       stomp.publish(`/app/turn/${roomId}/join`, { type: MessageType.JOIN_ROOM, roomId, playerId: session.player.id,
         payload: { ...session.player, ready: true }, timestamp: Date.now() })
     } catch (cause) { if (!disposed) error.value = cause instanceof Error ? cause.message : 'Không thể tải game' }

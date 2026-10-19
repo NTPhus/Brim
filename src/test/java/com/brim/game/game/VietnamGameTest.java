@@ -11,15 +11,25 @@ class VietnamGameTest {
         var game=new VietnamGame("room","MEDIUM");game.setPlayer1("human");game.configure(Map.of("vietnamChapter",chapter));return game;
     }
     private void input(VietnamGame g,double dx,double dy,String action,boolean fire) {
-        assertTrue(g.makeMove("human",new VietnamGame.Input(dx,dy,1500,500,fire,false,action)));g.tick();
+        assertTrue(g.makeMove("human",new VietnamGame.Input(dx,dy,1500,500,fire,false,action,action.isEmpty()?0:g.getState().lastCommandSeq()+1)));g.tick();
     }
     private void walk(VietnamGame g,double x,double y) {
-        for(int i=0;i<300;i++) {
+        for(int i=0;i<2000;i++) {
             if(g.isGameOver())return;
             var a=g.getState().units().get(0);
-            if(Math.abs(a.x()-x)<15&&Math.abs(a.y()-y)<15)return;
-            double dx=Math.abs(a.x()-x)<15?0:Math.signum(x-a.x()),dy=Math.abs(a.y()-y)<15?0:Math.signum(y-a.y());
-            input(g,dx,dy,"",false);
+            if(a.tank()) {
+                double distance=Math.hypot(x-a.x(),y-a.y()),speed=a.tacticalView().speed();
+                if(distance<18&&Math.abs(speed)<.5)return;
+                double angle=Math.atan2(y-a.y(),x-a.x());
+                double diff=com.brim.game.game.tactical.HeavyVehicle.wrap(angle-a.hullAngle());
+                double turn=Math.max(-1,Math.min(1,diff/.04));
+                double forward=Math.abs(diff)<.15&&distance>Math.max(8,speed*speed/70+4)?1:0;
+                input(g,turn,-forward,"",false);
+            }else{
+                if(Math.abs(a.x()-x)<15&&Math.abs(a.y()-y)<15)return;
+                double dx=Math.abs(a.x()-x)<15?0:Math.signum(x-a.x()),dy=Math.abs(a.y()-y)<15?0:Math.signum(y-a.y());
+                input(g,dx,dy,"",false);
+            }
         }
         fail("Route blocked at "+g.getState().units().get(0));
     }
@@ -32,7 +42,7 @@ class VietnamGameTest {
             var target=g.getState().units().stream().filter(a->!a.ally()&&a.hp()>0)
                     .min(Comparator.comparingDouble(a->Math.hypot(a.x()-me.x(),a.y()-me.y()))).orElse(null);
             if(target==null)break;
-            assertTrue(g.makeMove("human",new VietnamGame.Input(0,0,target.x(),target.y(),true,true,g.getState().ammo()==0?"RELOAD":"")));
+            assertTrue(g.makeMove("human",new VietnamGame.Input(0,0,target.x(),target.y(),true,true,g.getState().ammo()==0?"RELOAD":"",g.getState().ammo()==0?g.getState().lastCommandSeq()+1:0)));
             g.tick();
         }
         assertTrue(g.getState().units().get(0).hp()>0,"The squad should survive a supported trench approach");
@@ -49,12 +59,26 @@ class VietnamGameTest {
         }
     }
 
+    @Test void discreteSupplyCommandSurvivesContinuousUpdatesAndIsAppliedOnlyOnce() {
+        var g=game(1);walk(g,200,850);
+        var e=new VietnamGame.Input(0,0,0,0,false,false,"INTERACT",1);
+        assertTrue(g.makeMove("human",e));assertTrue(g.makeMove("human",e));
+        assertTrue(g.makeMove("human",new VietnamGame.Input(0,0,0,0,false,false,"")));
+        g.tick();assertEquals(1,g.getState().lastCommandSeq());assertEquals(48,g.getState().reserveAmmo());
+        assertTrue(g.makeMove("human",e));g.tick();assertEquals(48,g.getState().reserveAmmo());
+        assertEquals(0,g.getState().supplies().stream().filter(c->c.id().equals("depot-a")).findFirst().orElseThrow().quantity());
+    }
+    @Test void tacticalCampaignUsesPrivateStateAndDoesNotExposeHiddenEnemies() {
+        var g=game(1);assertTrue(g.privateState());assertEquals(Map.of(),g.getState("outsider"));
+        assertTrue(g.getState().units().stream().allMatch(VietnamGame.Unit::ally));
+    }
+
     @Test void invalidIdentityAndNonFiniteInputCannotMoveAvatar() {
         var g=game(1);double x=g.getState().units().get(0).x();
         assertFalse(g.makeMove("outsider",new VietnamGame.Input(1,0,0,0,false,false,"")));
         assertFalse(g.makeMove("human",new VietnamGame.Input(Double.NaN,0,0,0,false,false,"")));
         g.tick();assertEquals(x,g.getState().units().get(0).x());
-        input(g,1e20,0,"",false);assertEquals(x+10,g.getState().units().get(0).x());
+        input(g,1e20,0,"",false);assertEquals(x+6.5,g.getState().units().get(0).x());
         for(int i=0;i<10;i++)g.tick();double stopped=g.getState().units().get(0).x();g.tick();assertEquals(stopped,g.getState().units().get(0).x());
     }
     @Test void lockedChaptersAreClampedOnServerAndCampaignIsItsOwnSoloRealtimeGame() {
@@ -87,13 +111,13 @@ class VietnamGameTest {
         for(int i=0;i<8;i++)input(g,1,0,"",false);
         assertTrue(g.getState().units().get(0).x()<1350);
         input(g,0,0,"INTERACT",false);assertEquals(2,g.getState().objective());
-        walk(g,1470,520);assertEquals("human",g.getWinner());assertEquals(5,g.getState().ammo());
+        walk(g,1470,520);assertEquals("human",g.getWinner());assertEquals(1,g.getState().ammo());assertEquals(7,g.getState().reserveAmmo());
     }
     @Test void ammunitionAndReloadAreAuthoritativeAndSnapshotsDoNotAliasActors() {
         var g=game(1);var before=g.getState();
-        for(int i=0;i<60;i++)input(g,0,0,"",true);
+        for(int i=0;i<90;i++)input(g,0,0,"",true);
         assertEquals(0,g.getState().ammo());assertEquals(12,before.ammo());
-        input(g,0,0,"RELOAD",false);for(int i=0;i<16;i++)g.tick();assertEquals(12,g.getState().ammo());
+        input(g,0,0,"RELOAD",false);for(int i=0;i<30;i++)g.tick();assertEquals(12,g.getState().ammo());assertEquals(12,g.getState().reserveAmmo());
         input(g,1,0,"",false);assertEquals(120,before.units().get(0).x());
         g.retainPlayers(Set.of());assertTrue(g.isGameOver());assertNull(g.getWinner());
     }

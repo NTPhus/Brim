@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tacticalMessages } from '@/types/tactical'
 import { tankMap } from '@/game/tank/maps'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import Phaser from 'phaser'
@@ -31,6 +32,7 @@ const clock = ref(Date.now())
 const lastSnapshotAt = ref(Date.now())
 const networkStatus = computed(() => !stomp.connected.value ? 'Đang kết nối lại…' : clock.value - lastSnapshotAt.value > 1000 ? 'Mạng chậm · đang chờ cập nhật' : 'Đã kết nối')
 const myPlayerId = session.player.id
+const isHost = computed(() => roomInfo.value?.hostId === myPlayerId)
 
 const isConnecting = ref(true)
 const isGameOver = ref(false)
@@ -53,9 +55,18 @@ let clockTimer: number | undefined
 
 const assault = computed(() => gameState.value?.mode === 'ASSAULT')
 const myTank = computed(() => gameState.value?.tanks[myPlayerId])
+const tactical = computed(() => myTank.value?.tacticalView)
+const commandNotice = computed(() => tacticalMessages[tactical.value?.commandStatus ?? ''] ?? '')
+let pendingCommand: { commandSeq: number; action: string } | null = null
+let commandSeq = 0
+function issueCommand(action: string) {
+  if (!assault.value || !alive.value || pendingCommand || !stomp.connected.value) return
+  commandSeq = Math.max(commandSeq, tactical.value?.lastCommandSeq ?? 0) + 1
+  pendingCommand = { commandSeq, action }; sendInput()
+}
 const upgrades = computed(() => [
-  { branch: 'ENGINE', label: 'Động cơ', level: myTank.value?.engineLevel ?? 0, detail: '+ tốc độ' },
-  { branch: 'CANNON', label: 'Pháo', level: myTank.value?.cannonLevel ?? 0, detail: '+ sát thương / tốc bắn' },
+  { branch: 'ENGINE', label: 'Động cơ', level: myTank.value?.engineLevel ?? 0, detail: '+10% quãng đường / cấp' },
+  { branch: 'CANNON', label: 'Pháo', level: myTank.value?.cannonLevel ?? 0, detail: '+15 sát thương / cấp' },
   { branch: 'ARMOR', label: 'Giáp', level: myTank.value?.armorLevel ?? 0, detail: '+35 HP & sửa chữa' }
 ])
 function upgrade(branch: string) {
@@ -87,12 +98,15 @@ function sendInput() {
       turningLeft: input.value.turnLeft,
       turningRight: input.value.turnRight,
       shooting: input.value.shoot || !!aim?.shooting,
+      ...(pendingCommand ?? {}),
       ...(aim ? { targetX: aim.targetX, targetY: aim.targetY } : {})
     }
   })
 }
 
 function handleRestart() {
+  if (!isHost.value) return
+  pendingCommand = null
   isGameOver.value = false
   alive.value = true
   health.value = 100
@@ -192,6 +206,7 @@ onMounted(async () => {
       if ((state.serverTime ?? 0) < (gameState.value?.serverTime ?? 0)) return
       lastSnapshotAt.value = Date.now()
       gameState.value = state
+      if (pendingCommand && (state.tanks[myPlayerId]?.tacticalView?.lastCommandSeq ?? 0) >= pendingCommand.commandSeq) pendingCommand = null
       tankScene?.updateGameState(state)
       if (state.state === 'IN_PROGRESS' || Object.keys(state.tanks).length > 0) {
         gameStarted.value = true
@@ -259,6 +274,8 @@ onMounted(async () => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
         e.preventDefault()
       }
+      if (!e.repeat && e.code === 'KeyE') { issueCommand('INTERACT'); return }
+      if (!e.repeat && e.code === 'KeyF') { issueCommand('REPAIR'); return }
       if (pressedKeys.has(e.code)) return
       pressedKeys.add(e.code)
       updateInputState()
@@ -306,7 +323,7 @@ onUnmounted(() => {
 <template>
   <div class="tank-game">
     <div class="network-strip" role="status">{{ networkStatus }} · Art: Kenney / CC0</div>
-    <div class="item-legend">✚ Hồi máu · ◯ Khiên 1 phát / 10s · » Tăng tốc 6s · » Bắn nhanh 6s
+    <div v-if="!assault" class="item-legend">✚ Hồi máu · ◯ Khiên 1 phát / 10s · » Tăng tốc 6s · » Bắn nhanh 6s
       <strong v-for="effect in activeEffects" :key="effect.label">{{ effect.label }} {{ Math.ceil((effect.until - clock) / 1000) }}s</strong>
     </div>
     <div class="game-header">
@@ -316,7 +333,7 @@ onUnmounted(() => {
       </div>
       <div class="game-info">
         <label class="color-picker" title="Màu xe tăng"><span>🎨</span><input v-model="selectedColor" type="color" @change="updateColor" /></label>
-        <span class="hp" :class="{ low: health <= 30 }">❤️ {{ health }} HP</span>
+        <span class="hp" :class="{ low: health <= (myTank?.maxHealth ?? 100) * .3 }">❤️ {{ health }} / {{ myTank?.maxHealth ?? 100 }} HP</span>
         <span class="score">⭐ {{ score }} điểm</span>
         <span v-if="!alive" class="dead">Đã hy sinh ☠️</span>
       </div>
@@ -328,11 +345,24 @@ onUnmounted(() => {
 
     <div v-if="assault" class="assault-panel">
       <div class="mission-status"><strong>ĐỘT KÍCH · {{ tankMap(gameState?.mapId ?? 'ARENA').name }}</strong>
-        <span>Đợt {{ gameState?.wave || 1 }} · {{ gameState?.enemiesRemaining }} địch
-          <template v-if="gameState?.enemiesRemaining === 0"> · Tiếp viện sau {{ Math.ceil((gameState?.nextWaveTicks ?? 0) / 20) }}s</template>
+        <span>Đợt {{ gameState?.wave || 1 }} · {{ gameState?.contacts?.filter(c => c.current).length ?? 0 }} tiếp xúc đang thấy
+          <template v-if="gameState && gameState.wave > 0 && gameState.contacts?.length === 0"> · Trinh sát và giữ quân</template>
         </span>
         <strong>{{ myTank?.credits ?? 0 }} tiếp tế</strong>
       </div>
+      <div v-if="tactical" class="tactical-hud" aria-live="polite">
+        <span>{{ tactical.weapon.state === 'READY' ? '1 viên sẵn sàng' : tactical.weapon.state === 'LOADING' ? 'Đang nạp 1 viên' : 'Pháo hết đạn' }} · {{ tactical.weapon.reserve }} dự trữ</span>
+        <span v-if="tactical.weapon.state === 'LOADING'">{{ (tactical.weapon.remainingMs / 1000).toFixed(1) }}s</span>
+        <progress v-if="tactical.weapon.state === 'LOADING'" aria-label="Nạp pháo" :value="6000 - tactical.weapon.remainingMs" max="6000" />
+        <span>Nhiên liệu {{ Math.ceil(tactical.fuel / tactical.fuelCapacity * 100) }}%</span>
+        <span>{{ tactical.repairKits }} bộ sửa</span>
+        <span>{{ tactical.settled ? 'Ngắm ổn định' : 'Chưa ổn định nòng' }}</span>
+        <span v-if="tactical.repairRemainingMs > 0">Sửa xe {{ (tactical.repairRemainingMs / 1000).toFixed(1) }}s</span>
+        <button @click="issueCommand('INTERACT')">E · Nhận tiếp tế</button>
+        <button @click="issueCommand('REPAIR')">F · Sửa xe</button>
+        <button v-if="isHost" @click="handleRestart">Bắt đầu lượt mới</button>
+      </div>
+      <p v-if="commandNotice" class="hint" role="status">{{ commandNotice }}</p>
       <div class="upgrade-bar">
         <button v-for="item in upgrades" :key="item.branch" class="upgrade-button"
           :disabled="!alive || item.level >= 3 || (myTank?.credits ?? 0) < (item.level + 1) * 100" @click="upgrade(item.branch)">
@@ -340,7 +370,7 @@ onUnmounted(() => {
           <small>{{ item.detail }}</small>
         </button>
       </div>
-      <div class="hint">W/S tiến lùi · A/D xoay xe · Chuột ngắm / giữ chuột trái hoặc Space để bắn · Tầm 700 · Bán kính nổ 120, sát tâm đau hơn · Nổ khi chạm vật cản · Đứng gần điểm nổ sẽ tự mất máu</div>
+      <div class="hint">W/S tiến lùi · A/D xoay xe · Chuột ngắm / giữ chuột trái hoặc Space để bắn · Tầm 700 · Nạp pháo 6s · Xe nặng, đạn và nhiên liệu hữu hạn · Vật cản chặn đạn/nổ · Vòng sáng chỉ là tầm bắn</div>
     </div>
 
     <div class="canvas-wrapper">
@@ -361,7 +391,7 @@ onUnmounted(() => {
           <h2>{{ gameOverMessage || 'Trận chiến kết thúc!' }}</h2>
           <p class="final-score">Tổng điểm: <strong>{{ score }}</strong></p>
           <div class="modal-buttons">
-            <button class="btn-primary" @click="handleRestart">🎮 Chơi lại</button>
+            <button v-if="isHost" class="btn-primary" @click="handleRestart">🎮 Chơi lại</button>
             <button class="btn-secondary" @click="router.push(`/room/${roomId}`)">🏠 Phòng chờ</button>
             <button class="btn-secondary" @click="handleGoToLobby">📋 Về sảnh</button>
           </div>
@@ -372,8 +402,9 @@ onUnmounted(() => {
         <div class="death-card">
           <span class="death-icon">💥</span>
           <h2>Xe tăng đã bị phá hủy</h2>
-          <p>{{ assault ? "Hồi sinh giữ điểm, tiếp tế và nâng cấp trong trận." : "Hồi sinh bắt đầu lượt mới, điểm về 0." }}</p>
-          <button :disabled="respawnRemaining > 0" @click="handleRespawn">
+          <p v-if="!assault">Hồi sinh bắt đầu lượt mới, điểm về 0.</p>
+          <p v-if="assault">Xe bị hạ không hồi sinh trong đợt hành quân. Chờ đồng đội hoặc bắt đầu trận mới.</p>
+          <button v-else :disabled="respawnRemaining > 0" @click="handleRespawn">
             {{ respawnRemaining > 0 ? `Hồi sinh sau ${respawnRemaining}s` : '🛡️ Trở lại chiến trường' }}
           </button>
         </div>
@@ -402,6 +433,9 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.tactical-hud { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; padding:.45rem 0; color:#d5dfbd; font-size:.75rem; }
+.tactical-hud button { font-size:.7rem; padding:.3rem .5rem; }
+.tactical-hud progress { width:85px; accent-color:#c5ba78; }
 .assault-panel { width: 100%; padding: .5rem .75rem; border: 1px solid #59604a; border-radius: 10px; background: #18241f; }
 .mission-status { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .35rem; color: #f2dba3; font-size: .8rem; }
 .upgrade-bar { display: flex; gap: .4rem; margin: .4rem 0; }

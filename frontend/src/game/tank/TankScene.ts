@@ -1,7 +1,7 @@
 import { createId } from '@/utils/id'
 import Phaser from 'phaser'
 import { WorldEffects } from '@/game/WorldEffects'
-import { tankMap, shellImpact } from './maps'
+import { tankMap } from './maps'
 import type { TankGameState } from '@/types/gameState'
 
 const TANK_SIZE = 28
@@ -85,7 +85,7 @@ export class TankScene extends Phaser.Scene {
       if(previous!==undefined&&tank.health>previous&&this.lastState?.tanks[id]?.alive&&tank.alive)this.effects.emit(tank.x,tank.y,0x84e6a5,35)
       this.previousHealth.set(id, tank.health)
     }
-    this.terrain?.setTint(tankMap, shellImpact(state.mapId).terrain)
+    this.terrain?.setTint(tankMap(state.mapId).terrain)
     this.lastState = state
     this.cameras.main.setBounds(0, 0, state.mapWidth, state.mapHeight)
   }
@@ -131,7 +131,7 @@ export class TankScene extends Phaser.Scene {
       if (!Phaser.Geom.Rectangle.Overlaps(view, new Phaser.Geom.Rectangle(wall.x, wall.y, wall.width, wall.height))) continue
       this.graphics.fillStyle(0x050811, .35)
       this.graphics.fillRoundedRect(wall.x + 5, wall.y + 7, wall.width, wall.height, 5)
-      this.graphics.fillStyle(tankMap, shellImpact(state.mapId).wall, 1)
+      this.graphics.fillStyle(tankMap(state.mapId).wall, 1)
       this.graphics.fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 5)
       this.graphics.fillStyle(0x536b86, .55)
       this.graphics.fillRoundedRect(wall.x + 3, wall.y + 3, Math.max(1, wall.width - 6), Math.max(1, wall.height - 6), 4)
@@ -239,25 +239,28 @@ export class TankScene extends Phaser.Scene {
       g.lineStyle(3, 0xffcd75, life).strokeCircle(blast.x, blast.y, radius)
       g.fillStyle(0xffecc1, life * .75).fillCircle(blast.x, blast.y, 25 * life)
     }
-    for (const shell of state.bullets.filter(b => b.shell && b.ownerId !== this.playerId)) {
-      const impact = shellImpact(shell.x, shell.y, shell.targetX, shell.targetY, state.walls)
-      g.lineStyle(1, 0xff7961, .35).strokeCircle(impact.x, impact.y, 120)
+    for (const supply of state.supplies ?? []) {
+      const color = { SHELLS: 0xe2c074, FUEL: 0x7ab5bd, REPAIR: 0xb6bf9b }[supply.kind]
+      g.fillStyle(0x1d2720, supply.quantity > 0 ? .95 : .35).fillRoundedRect(supply.x - 16, supply.y - 16, 32, 32, 4)
+      g.lineStyle(2, color, supply.quantity > 0 ? 1 : .25).strokeRoundedRect(supply.x - 16, supply.y - 16, 32, 32, 4)
+      g.lineBetween(supply.x - 8, supply.y, supply.x + 8, supply.y)
+      if (supply.kind === 'REPAIR') g.lineBetween(supply.x, supply.y - 8, supply.x, supply.y + 8)
+      else if (supply.kind === 'SHELLS') g.strokeRect(supply.x - 5, supply.y - 9, 10, 18)
+      else g.strokeCircle(supply.x, supply.y, 8)
+    }
+    for (const contact of state.contacts ?? []) if (!contact.current) {
+      g.lineStyle(1, 0xccb68a, .4).strokeCircle(contact.x, contact.y, 15)
+      g.lineBetween(contact.x - 5, contact.y, contact.x + 5, contact.y)
     }
     const tank = state.tanks[this.playerId]
     const aim = this.getAim()
     if (!tank?.alive || !aim) return
-    const tx = Phaser.Math.Clamp(aim.targetX, 25, state.mapWidth - 25)
-    const ty = Phaser.Math.Clamp(aim.targetY, 25, state.mapHeight - 25)
-    const angle = Math.atan2(ty - tank.y, tx - tank.x)
-    const distance = Math.min(700, Phaser.Math.Distance.Between(tank.x, tank.y, tx, ty))
-    const impact = shellImpact(tank.x, tank.y, tank.x + Math.cos(angle) * distance, tank.y + Math.sin(angle) * distance, state.walls)
-    const { x, y } = impact
-    const danger = Phaser.Math.Distance.Between(tank.x, tank.y, x, y) < 120
-    const color = danger ? 0xff6655 : impact.blocked ? 0xffa64d : 0xffdc92
-    g.lineStyle(1, color, .35).lineBetween(tank.x, tank.y, x, y)
-    g.fillStyle(color, danger ? .12 : .04).fillCircle(x, y, 120)
-    g.lineStyle(1.5, color, .8).strokeCircle(x, y, 120)
-    g.strokeCircle(x, y, 9).lineBetween(x - 16, y, x + 16, y).lineBetween(x, y - 16, x, y + 16)
+    const range = tank.tacticalView?.range ?? 700
+    g.lineStyle(1, 0xc2cbb0, .16).strokeCircle(tank.x, tank.y, range)
+    const distance = Math.min(range, Phaser.Math.Distance.Between(tank.x, tank.y, aim.targetX, aim.targetY))
+    const angle = Math.atan2(aim.targetY - tank.y, aim.targetX - tank.x)
+    const x = tank.x + Math.cos(angle) * distance, y = tank.y + Math.sin(angle) * distance
+    g.lineStyle(1, 0xd8d9b6, .7).lineBetween(x - 5, y, x + 5, y).lineBetween(x, y - 5, x, y + 5)
   }
 
   private drawHealthPacks(state: TankGameState) {

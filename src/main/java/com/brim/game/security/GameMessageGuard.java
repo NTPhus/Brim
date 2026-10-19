@@ -120,11 +120,11 @@ public class GameMessageGuard implements ChannelInterceptor {
         if (!match.matches()) { RoomAccess.deny(); return; }
         var room = access.member(match.group(2), playerId);
         String suffix = match.group(3);
-        if (room.getGameType() == GameType.BATTLESHIP && match.group(1).equals("game") && suffix.equals("over")) RoomAccess.deny();
+        if ((room.getGameType() == GameType.BATTLESHIP || room.getGameType() == GameType.VIETNAM_CAMPAIGN) && match.group(1).equals("game") && suffix.equals("over")) RoomAccess.deny();
         if (suffix.startsWith("state/")) {
             if (!suffix.equals("state/" + playerId) || match.group(1).equals("room")) RoomAccess.deny();
         } else if (suffix.equals("state") && match.group(1).equals("game")
-                && (room.getGameType() == GameType.TANK || room.getGameType() == GameType.SNAKE || room.getGameType() == GameType.BATTLESHIP)) RoomAccess.deny();
+                && (room.getGameType() == GameType.TANK || room.getGameType() == GameType.SNAKE || room.getGameType() == GameType.BATTLESHIP || room.getGameType() == GameType.VIETNAM_CAMPAIGN)) RoomAccess.deny();
     }
 
     /** Re-check after leave/logout, including subscriptions that were allowed earlier. */

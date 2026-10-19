@@ -1,3 +1,4 @@
+import type { TacticalVehicleView, TacticalSupply, TacticalContact } from './tactical'
 /**
  * Snake game state (mirrors backend SnakeGame.SnakeGameState)
  */
@@ -38,6 +39,7 @@ export interface SnakeGameState {
  * Tank game state (mirrors backend TankGame.TankGameState)
  */
 export interface TankTank {
+  tacticalView?: TacticalVehicleView | null
   turretAngle: number
   maxHealth: number
   credits: number
@@ -62,8 +64,6 @@ export interface TankTank {
 
 export interface TankBullet {
   shell: boolean
-  targetX: number
-  targetY: number
   x: number
   y: number
   angle: number
@@ -96,6 +96,9 @@ export interface TankInput {
 }
 
 export interface TankGameState {
+  rulesVersion: string
+  supplies: TacticalSupply[]
+  contacts: TacticalContact[]
   enemyMarkers: { x: number; y: number }[]
   mode: 'CLASSIC' | 'ASSAULT'
   mapId: string

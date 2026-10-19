@@ -66,6 +66,13 @@ function draw() {
       context.fillStyle = '#4ade80'
       context.fillRect(sx(item.x) - 2, sy(item.y) - 2, 4, 4)
     }
+    for (const supply of state.supplies ?? []) {
+      context.fillStyle = supply.quantity > 0 ? '#e2c074' : '#626855'
+      context.fillRect(sx(supply.x) - 2, sy(supply.y) - 2, 4, 4)
+    }
+    for (const contact of state.contacts ?? []) if (!contact.current) {
+      context.strokeStyle = '#bbaa8277'; context.strokeRect(sx(contact.x) - 2, sy(contact.y) - 2, 4, 4)
+    }
     for (const enemy of state.enemyMarkers ?? []) {
       context.fillStyle = '#fb8067'
       context.fillRect(sx(enemy.x) - 1.5, sy(enemy.y) - 1.5, 3, 3)

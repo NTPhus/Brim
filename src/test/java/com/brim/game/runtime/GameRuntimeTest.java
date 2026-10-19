@@ -37,16 +37,20 @@ class GameRuntimeTest {
         CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1), completed = new CountDownLatch(1);
         AtomicInteger executed = new AtomicInteger();
         try {
-            runtime.publish("room", () -> {
+            assertTrue(runtime.tryPublish("room", () -> {
                 executed.incrementAndGet(); entered.countDown();
                 try { release.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                 completed.countDown();
-            });
+            }));
             assertTrue(entered.await(2, TimeUnit.SECONDS));
-            for (int i = 0; i < 100; i++) runtime.publish("room", executed::incrementAndGet);
+            for (int i = 0; i < 100; i++) assertFalse(runtime.tryPublish("room", executed::incrementAndGet));
             release.countDown();
             assertTrue(completed.await(2, TimeUnit.SECONDS));
             assertEquals(1, executed.get());
+            CountDownLatch terminal = new CountDownLatch(1);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (!runtime.tryPublish("room", terminal::countDown) && System.nanoTime() < deadline) Thread.yield();
+            assertTrue(terminal.await(2, TimeUnit.SECONDS));
         } finally { release.countDown(); runtime.close(); }
     }
     @Test void botSearchQueueIsBounded() throws Exception {

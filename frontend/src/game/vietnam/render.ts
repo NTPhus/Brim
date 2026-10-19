@@ -66,13 +66,15 @@ export function renderBattle(canvas:HTMLCanvasElement,state:CampaignState,camera
   }
   for(const unit of state.units){
     if(unit.hp<=0||(underground&&unit.id!==me.id))continue
-    ctx.save();ctx.translate(unit.x,unit.y);ctx.rotate(unit.angle)
+    ctx.save();ctx.translate(unit.x,unit.y);ctx.rotate(unit.tank?unit.hullAngle:unit.angle)
     ctx.fillStyle='#07130b55';ctx.beginPath();ctx.ellipse(5,7,unit.tank?28:12,unit.tank?21:9,0,0,7);ctx.fill()
     if(unit.tank){
       ctx.fillStyle='#232e28';ctx.fillRect(-27,-24,54,10);ctx.fillRect(-27,14,54,10)
       ctx.fillStyle=unit.ally?'#626b3e':'#817963';ctx.fillRect(-24,-17,48,34)
+      ctx.save();ctx.rotate(unit.angle-unit.hullAngle)
       ctx.fillStyle='#7b8051';ctx.beginPath();ctx.ellipse(0,0,15,13,0,0,7);ctx.fill()
       ctx.strokeStyle='#444e32';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(5,0);ctx.lineTo(39,0);ctx.stroke()
+      ctx.restore()
       ctx.fillStyle='#e3dabb';ctx.font='bold 11px sans-serif';ctx.fillText(unit.id===me.id?'390':'843',-19,6)
     }else{
       ctx.fillStyle=unit.ally?'#747c48':'#a29270';ctx.fillRect(-9,-7,18,14)
@@ -81,9 +83,15 @@ export function renderBattle(canvas:HTMLCanvasElement,state:CampaignState,camera
       ctx.strokeStyle='#302d25';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(6,5);ctx.lineTo(23,5);ctx.stroke()
     }
     ctx.restore()
-    ctx.fillStyle='#1c221a';ctx.fillRect(unit.x-20,unit.y-36,40,4);ctx.fillStyle=unit.ally?'#aec486':'#d2957b';ctx.fillRect(unit.x-20,unit.y-36,40*unit.hp/(unit.tank?220:100),4)
+    ctx.fillStyle='#1c221a';ctx.fillRect(unit.x-20,unit.y-36,40,4);ctx.fillStyle=unit.ally?'#aec486':'#d2957b';ctx.fillRect(unit.x-20,unit.y-36,40*unit.hp/unit.maxHealth,4)
     if(unit.ally){ctx.font='11px sans-serif';ctx.fillStyle='#f1e6c7';ctx.fillText(unit.id===me.id?'BẠN':unit.name,unit.x-20,unit.y-43)}
   }
+  for(const supply of state.supplies??[])if(supply.layer===state.layer){
+    ctx.fillStyle=supply.quantity>0?'#e2c074':'#66664e';ctx.fillRect(supply.x-11,supply.y-11,22,22)
+    ctx.fillStyle='#1f2c20';ctx.font='bold 10px sans-serif';ctx.fillText(supply.kind==='FUEL'?'F':supply.kind==='REPAIR'?'+':'A',supply.x-4,supply.y+4)
+  }
+  if(me.tank&&!underground){ctx.strokeStyle='#d6dcac33';ctx.lineWidth=1;ctx.beginPath();ctx.arc(me.x,me.y,me.tacticalView?.range??700,0,7);ctx.stroke()}
+  for(const shell of state.projectiles??[]){ctx.fillStyle='#edd39b';ctx.beginPath();ctx.arc(shell.x,shell.y,3,0,7);ctx.fill()}
   if(!underground)for(const shot of state.shots){
     ctx.strokeStyle=shot.blast?'#ffce80':'#ffebba';ctx.globalAlpha=shot.life/3;ctx.lineWidth=shot.blast?3:1
     ctx.beginPath();ctx.moveTo(shot.x,shot.y);ctx.lineTo(shot.tx,shot.ty);ctx.stroke()
@@ -97,6 +105,7 @@ export function renderBattle(canvas:HTMLCanvasElement,state:CampaignState,camera
   const mx=w-174,my=h-118
   ctx.fillStyle='#102218e6';ctx.fillRect(mx,my,160,100);ctx.strokeStyle='#a6ad71';ctx.lineWidth=1;ctx.strokeRect(mx,my,160,100)
   for(const a of state.areas.filter(a=>a.layer===state.layer)){ctx.fillStyle='#9e946b77';ctx.fillRect(mx+a.x/10,my+a.y/10,a.width/10,a.height/10)}
+  for(const supply of state.supplies??[])if(supply.layer===state.layer){ctx.fillStyle=supply.quantity>0?'#e2c074':'#66664e';ctx.fillRect(mx+supply.x/10-2,my+supply.y/10-2,4,4)}
   for(const unit of state.units.filter(a=>a.hp>0&&(!underground||a.id===me.id))){ctx.fillStyle=unit.id===me.id?'#fff5bd':unit.ally?'#9ec585':'#dd8865';ctx.fillRect(mx+unit.x/10-2,my+unit.y/10-2,4,4)}
   if(goal){ctx.strokeStyle='#f1d482';ctx.beginPath();ctx.arc(mx+goal.x/10,my+goal.y/10,5,0,7);ctx.stroke()}
   ctx.fillStyle='#d9ddbb';ctx.font='10px sans-serif';ctx.fillText(underground?'SƠ ĐỒ ĐỊA ĐẠO':'BẢN ĐỒ CHIẾN TRƯỜNG',mx,my-5)

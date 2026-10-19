@@ -1,6 +1,6 @@
 # Dấu chân Việt — đặc tả gameplay chiến thuật và kế hoạch triển khai
 
-Ngày cập nhật: 19/10/2026. Trạng thái: **đặc tả đề xuất, chưa triển khai các cơ chế mới trong tài liệu này**.
+Ngày cập nhật: 19/10/2026. Trạng thái: **đã triển khai nền cơ chế P0; còn cần playtest và nghiệm thu hai tuyến tiếp cận. P1–P3 chưa triển khai**.
 
 Tài liệu dùng để triển khai tiếp từ bản chơi hiện có vào buổi chiều. Các thông số là giá trị khởi đầu để cân bằng bằng playtest, không phải thông số khí tài hoặc mô tả chiến thuật ngoài đời. Kế hoạch kiến trúc toàn nền tảng nằm tại [ARCHITECTURE_ROADMAP.md](ARCHITECTURE_ROADMAP.md).
 
@@ -52,7 +52,7 @@ Các lựa chọn cốt lõi:
 - Bản đồ nhỏ, hồ sơ bối cảnh có nguồn, lưu màn đã mở theo phiên guest.
 - Bản hiện tại còn nhanh, tài nguyên nạp lại chưa hữu hạn, AI đơn giản, vùng nổ còn được báo trước ở Tank, chưa có chế độ chỉ huy hoặc màn phòng không.
 
-**Các tính năng từ mục 3 trở đi là đặc tả tương lai.** Không sửa tài liệu thành “đã có” cho tới khi code, test và playtest tương ứng hoàn tất.
+**Mục 3 trở đi giữ vai trò đặc tả đích.** Trạng thái thực tế và giới hạn của bản P0 nằm ở mục 16; việc có code/test chưa đồng nghĩa đã nghiệm thu cảm giác gameplay.
 
 ### 2.3. Phần chưa làm trong lần đầu
 
@@ -765,3 +765,48 @@ Các câu hỏi review:
 - [ ] Chơi thử trực tiếp, ghi nhận kết quả; không dùng việc “test xanh” để kết luận cảm giác gameplay đã đạt.
 
 **Kết quả mong đợi của vòng đầu:** một lát cắt chiến đấu chiến thuật có thể chơi, kiểm thử và cân bằng được. Những cơ chế chưa có phải được ghi đúng trạng thái trong tài liệu và UI; không công bố cả chiến dịch/mọi vai đã hoàn thành chỉ vì đã tạo enum hoặc nút điều khiển.
+
+
+## 16. Trạng thái triển khai P0 ngày 19/10/2026
+
+### 16.1. Phần có thể chạy trong bản hiện tại
+
+Đợt này triển khai nền P0 vào Tank Assault và adapter của Dấu chân Việt. Classic giữ luật riêng. Thông số tập trung tại `src/main/resources/games/tactical-standard.json`, version `tactical-standard-1`; các con số là cân bằng game, không đại diện khí tài lịch sử.
+
+| Hạng mục | Đã triển khai | Ranh giới code |
+| --- | --- | --- |
+| Xe nặng | 1.200 HP người chơi/900 HP địch, tiến 45/lùi 25 unit/s, gia tốc/phanh, quay thân và tháp độc lập, độ tản giảm khi đứng ngắm ổn định | `game/tactical/HeavyVehicle`, hai game adapter |
+| Pháo | 8 viên ban đầu, tối đa 12; viên đang nạp đã trừ từ dự trữ; nạp 6 giây, hết đạn không tự sinh thêm | `CannonState` |
+| Đạn và sát thương | Đạn bay 500 unit/s; va chạm quét vật cản/xe đầu tiên; nổ bán kính 120, falloff 220 về 0; giáp trước/hông/sau; tự sát thương; vật che chặn nổ | `BattleObstacle`, `TacticalGeometry`, `TacticalDamage` |
+| Tiếp tế/sửa chữa | Kho hữu hạn, lấy đủ nhu cầu và giữ phần dư; nhiên liệu theo quãng đường thực đi; sửa 8 giây, +180 HP tới 70%; ngắt sửa hoàn kit | `HeavyVehicle`, inventory adapter từng game |
+| Thông tin chiến đấu | Server lọc địch trong tầm 500 và có đường nhìn; tài nguyên xe chỉ gửi chủ xe; Assault nhớ vị trí cuối 4 giây; không gửi endpoint đạn | Snapshot riêng từng người chơi, `GameMessageGuard` |
+| Điều khiển/UI | HUD đạn/nạp/nhiên liệu/kit, E tiếp tế, F sửa; chỉ vòng tầm bắn và tâm ngắm, hiệu ứng nổ sau va chạm thực | `TankScene`, `TankView`, Vietnam renderer/view |
+| Bộ binh chiến dịch | Băng 12 + 24 dự trữ, nạp 3 giây, kho tiếp đạn hữu hạn; AI cũng có băng và dự trữ hữu hạn | `VietnamGame` |
+| Tính nhất quán | Lệnh thao tác có sequence, gửi lại tới khi ACK, chống áp dụng lặp; reconnect không làm mới kho xe; cả đội Assault chết thì kết thúc, retry enqueue snapshot cuối khi output bận | Input adapter, `GameRuntime`, controller |
+
+Assault vẫn có nâng cấp bằng điểm tiếp tế: ENGINE tăng hiệu suất nhiên liệu (10% quãng đường/cấp), CANNON tăng 15 sát thương/cấp, ARMOR tăng 35 HP/cấp. Thời gian nạp và tốc độ tối đa của profile giữ nguyên. Hòm vật tư tồn tại theo lượt ghé map, không tái sinh mỗi wave; chặng map tiếp theo có kho mới. Điểm tiếp tế mua nâng cấp khác với đạn/nhiên liệu thực trong hòm. Chủ phòng có nút bắt đầu lượt mới để tránh phải chờ khi đội hết tài nguyên.
+
+Lệnh thao tác Dấu chân Việt phải gửi `commandSeq` nguyên dương tăng dần; snapshot ACK qua `lastCommandSeq`. Input liên tục không có action không xóa lệnh đang chờ. Tank dùng ACK trong `tacticalView`. Client cũ không có sequence cần tải lại frontend tương ứng. Snapshot chiến dịch đi qua `/topic/game/{roomId}/state/{playerId}`, guard chặn topic state/over chung để giữ cùng ranh giới quyền với dữ liệu riêng.
+
+### 16.2. Xác minh và phần cần chơi thử
+
+Kiểm thử tự động bao phủ bảo toàn đạn, thời gian nạp khi giữ bắn/spam input, quãng đường và nhiên liệu ở bước 50/100 ms, tốc độ quay, ngắt sửa/giới hạn kit, collision tường mỏng và xe, tự sát thương, giáp và che nổ, kho còn dư, reconnect, snapshot không lộ địch/endpoint, private subscription và gửi trạng thái cuối khi hàng đợi bận. Ba luồng hoàn thành màn cũ cũng được chạy lại với điều khiển tank có quán tính.
+
+Kết quả xác minh: `mvn -o clean test` thành công, 189 test được báo cáo, 187 qua và 2 bỏ qua; `npm run build` trong `frontend` thành công, bao gồm `vue-tsc`. Suite backend đầy đủ chạy ngoài sandbox vì Mockito cần Java agent và integration test cần mở cổng localhost. Frontend còn cảnh báo kích thước bundle Phaser lớn. Chưa có playtest trực tiếp với người chơi để kết luận nhịp độ hay mức khó đã đạt.
+
+Trước khi đóng P0 cần:
+
+- Chơi hai tuyến tiếp cận trong một tình huống tank cố định, ghi thời gian, đạn, nhiên liệu và tổn thất. Hòm Assault hiện đặt trên vị trí trống hợp lệ của map; chưa có bố trí tiếp tế thủ công và nghiệm thu hai tuyến như tiêu chí mục 13.
+- Thử nhóm co-op mất mạng/reconnect trên trình duyệt, mobile, chết khi đang nạp, hết nhiên liệu và bắt đầu lượt mới.
+- Cân bằng sát thương bộ binh/tank, nguồn đạn và thời gian di chuyển theo quan sát thực tế. Đặc biệt kiểm tra trường hợp hai bên cùng cạn đạn.
+
+### 16.3. Giới hạn còn lại, không được trình bày như đã hoàn thành
+
+- Chưa có commander/direct switch, đổi actor, lệnh squad, suppression, downed/rescue hoặc vai dân quân phòng không (P1/P3).
+- Chưa có mission graph mới, checkpoint bền vững hoặc tài nguyên xuyên các màn (P2). Trong cùng trận reconnect giữ state ở RAM; restart có chủ ý tạo lượt mới. Backend khởi động lại vẫn mất simulation hiện tại.
+- Ba màn hiện có giữ cấu trúc mục tiêu cũ; Củ Chi vẫn tạm dừng AI mặt đất khi người chơi xuống hầm. Chưa có perception memory/pathfinding chiến thuật mới cho chiến dịch; Assault chỉ thêm dấu tiếp xúc cũ cho người chơi.
+- Bộ binh địch trong Assault vẫn dùng cadence/tài nguyên kiểu wave cũ; inventory hữu hạn cho bộ binh mới áp dụng ở Dấu chân Việt. Chưa có hệ thống chia đạn giữa thành viên.
+- Đồ họa, âm thanh, map và bối cảnh vẫn là bản 2D cách điệu hiện có. Đợt này không thêm nhân vật, trận đánh hoặc chi tiết lịch sử chưa kiểm chứng; màn tiến vào Dinh không tự thêm giao tranh tại sân Dinh.
+- Cơ chế dùng chung được tách ở mức pure mechanics; chưa phải toàn bộ cấu trúc ECS/system ở mục 11, chưa tách service hoặc đưa tick combat qua Kafka.
+
+Bước tiếp theo sau playtest P0 là P1: một mission bộ binh hoàn chỉnh với lệnh tổ đội và hai cách tiếp cận có tác dụng đo được. Không thêm nhiều màn chỉ để kéo dài hành trình trước khi nhịp chơi nền được kiểm chứng.

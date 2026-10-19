@@ -51,15 +51,19 @@ public class GameRuntime {
     }
 
     /** Drop intermediate snapshots when output is busy; the next snapshot is authoritative. */
-    public void publish(String roomId, Runnable snapshot) {
-        if (!pendingOutput.add(roomId)) return;
+    public void publish(String roomId, Runnable snapshot) { tryPublish(roomId, snapshot); }
+
+    /** A terminal publisher can retry on its next tick instead of losing the final snapshot. */
+    public boolean tryPublish(String roomId, Runnable snapshot) {
+        if (!pendingOutput.add(roomId)) return false;
         try {
             output.execute(() -> {
                 try { snapshot.run(); }
                 catch (Exception error) { log.warn("Snapshot failed for {}", roomId, error); }
                 finally { pendingOutput.remove(roomId); }
             });
-        } catch (RejectedExecutionException busy) { pendingOutput.remove(roomId); }
+            return true;
+        } catch (RejectedExecutionException busy) { pendingOutput.remove(roomId); return false; }
     }
 
     /** Kafka/Redis availability must not block snapshot delivery. */
