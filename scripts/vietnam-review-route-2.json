@@ -1,0 +1,9 @@
+[
+  {"move":[215,755],"shot":"02-entrance"},
+  {"action":"INTERACT","shot":"02-underground"},
+  {"move":[710,760]},
+  {"move":[710,320],"action":"INTERACT","shot":"02-depot"},
+  {"move":[710,760]},
+  {"move":[1180,760],"action":"INTERACT","shot":"02-infirmary"},
+  {"move":[1155,755],"action":"INTERACT","shot":"02-result"}
+]

@@ -1,0 +1,7 @@
+[
+  {"move":[120,520]},
+  {"move":[700,520],"shot":"03-rendezvous"},
+  {"move":[1330,520],"shot":"03-gate"},
+  {"action":"INTERACT","shot":"03-open-gate"},
+  {"move":[1470,520],"shot":"03-result"}
+]

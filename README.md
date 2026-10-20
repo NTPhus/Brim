@@ -80,6 +80,8 @@ Run backend regression tests with `bash ./mvnw test` (PowerShell: `.\mvnw.cmd te
 - [Bài thực hành Kafka: topic, group, offset, retry, DLT, dedup](docs/KAFKA_LAB.md)
 - [Lộ trình game mới: Connect Four, Caro, Othello, Battleship, match-3, Bomberman](docs/GAME_ROADMAP.md)
 - [Lộ trình học Spring Boot bằng chính BRIM](docs/SPRING_BOOT_LEARNING.md)
+- [Review từng chiến dịch Dấu chân Việt: ảnh gameplay, đối chiếu yêu cầu và phiếu góp ý](docs/VIETNAM_CAMPAIGN_REVIEW.md) · [PDF](docs/VIETNAM_CAMPAIGN_REVIEW.pdf)
+- [Đặc tả Dấu chân Việt v2: hành trình dài, camera chéo, sinh tồn, hội thoại và các màn riêng](docs/VIETNAM_CAMPAIGN.md) · [PDF](docs/VIETNAM_CAMPAIGN.pdf) — thiết kế cần triển khai
 
 ## Lộ trình tài khoản và chat app
 

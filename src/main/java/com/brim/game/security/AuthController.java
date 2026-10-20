@@ -24,26 +24,37 @@ public class AuthController {
     private final HttpSessionSecurityContextRepository contexts;
     private final HttpSessionCsrfTokenRepository csrfTokens;
     private final SocketSessions sockets;
+
     @GetMapping("/csrf")
     public CsrfView csrf(CsrfToken token) { return new CsrfView(token.getHeaderName(), token.getToken()); }
+
     @GetMapping("/session")
     public GuestSession session(HttpServletRequest request) { return GuestSession.require(request.getSession(false)); }
+
     @PostMapping("/guest")
     public GuestSession guest(@Valid @RequestBody Profile requestBody, HttpServletRequest request, HttpServletResponse response) {
         // Repeated creation revokes the previous guest and every socket belonging to that session.
         var old = request.getSession(false);
         if (old != null) { sockets.revoke(old); old.invalidate(); }
+
         var session = request.getSession(true);
+
         var guest = new GuestSession(UUID.randomUUID().toString(), clean(requestBody.username()),
                 System.currentTimeMillis() + 4 * 60 * 60 * 1000L);
+
         session.setAttribute(GuestSession.ATTRIBUTE, guest);
         session.setMaxInactiveInterval(4 * 60 * 60);
+
         var authentication = new UsernamePasswordAuthenticationToken(guest.id(), null,
                 List.of(new SimpleGrantedAuthority("ROLE_PLAYER")));
+
         var context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
+
         SecurityContextHolder.setContext(context);
+
         contexts.saveContext(context, request, response);
+        
         return guest;
     }
     @PutMapping("/profile")

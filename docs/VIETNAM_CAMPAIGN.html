@@ -1,0 +1,855 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Dấu chân Việt — đặc tả hành trình chiến tranh, phiên bản 2</title><style>
+@page { size: A4; margin: 15mm 12mm; }
+* { box-sizing: border-box; }
+body { font: 15px/1.7 "DejaVu Sans", "Segoe UI", sans-serif; color:#25322e; background:#f4f2e9; margin:0; }
+main { max-width:1120px; margin:32px auto; padding:48px; background:white; }
+h1,h2,h3 { line-height:1.3; color:#234638; }
+h1 { font-size:32px; border-bottom:4px solid #b69753; padding-bottom:20px; }
+h2 { font-size:25px; margin-top:48px; padding-top:16px; border-top:1px solid #d9ddcf; }
+h3 { font-size:19px; margin-top:28px; }
+img { display:block; width:100%; height:auto; margin:18px auto 8px; border:1px solid #bbc7b8; }
+table { width:100%; border-collapse:collapse; margin:18px 0; font-size:12px; line-height:1.6; }
+th,td { border:1px solid #cdd5c7; text-align:left; vertical-align:top; padding:9px; overflow-wrap:anywhere; }
+th { background:#e9edde; color:#244333; }
+tr:nth-child(even) { background:#f7f8f2; }
+a { color:#356955; } code { font-size:.9em; overflow-wrap:anywhere; }
+pre { background:#eef1e7; padding:16px; white-space:pre-wrap; }
+blockquote { border-left:4px solid #b69753; padding-left:18px; }
+@media print {
+ body { background:white; font-size:10px; line-height:1.55; }
+ main { margin:0; padding:0; max-width:none; }
+ h1 { font-size:25px; } h2 { font-size:19px; break-before:page; border-top:0; margin-top:0; }
+ h3 { font-size:14px; break-after:avoid; }
+ table { font-size:8px; } th,td { padding:5px; } tr { break-inside:avoid; }
+ img { max-height:225mm; object-fit:contain; break-inside:avoid; }
+ p { orphans:3; widows:3; } a { color:inherit; text-decoration:none; }
+}
+</style></head><body><main><h1 id="dau-chan-viet-ac-ta-hanh-trinh-chien-tranh-phien-ban-2">Dấu chân Việt — đặc tả hành trình chiến tranh, phiên bản 2</h1>
+<p><strong>Cập nhật:</strong> 20/10/2026, theo góp ý sau bộ ảnh review. <strong>Trạng thái:</strong> thiết kế cần triển khai; chưa phải tính năng đã hoàn thành. Đợt này chỉ sửa docs và bản xuất HTML/PDF.</p>
+<p>Định hướng mới: một hành trình dài, có nhân vật, hội thoại, hậu cần, thương tích, trinh sát và nhiều màn riêng; không kết thúc sau vài waypoint. <a href="VIETNAM_CAMPAIGN_REVIEW.md">Ảnh review bản hiện tại</a> là baseline, không phải ảnh minh họa tính năng tương lai. <a href="archive/VIETNAM_CAMPAIGN_P0_2026-10-19.md">Spec P0 lưu trữ</a> giữ thông số/contract/test chi tiết trước lần sửa này; khi có khác biệt về trải nghiệm, phiên bản 2 được ưu tiên.</p>
+<h2 id="1-nhung-quyet-inh-chinh">1. Những quyết định chính</h2>
+<table>
+<thead>
+<tr>
+<th>Trụ cột</th>
+<th>Yêu cầu đã chốt theo góp ý</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hành trình</td>
+<td>Nhiều phân đoạn có quyết định, gặp người, hội thoại, nguy hiểm và hậu quả; checkpoint an toàn; không kéo dài bằng đi bộ trong map trống</td>
+</tr>
+<tr>
+<td>Quy mô</td>
+<td>Map nhiều khu, nhiều encounter và địch hơn; tuần tra, chốt và nhóm phản ứng; không dồn toàn bộ quân vào một khung hình</td>
+</tr>
+<tr>
+<td>Nhân vật</td>
+<td>Tỷ lệ người dễ nhìn, trang phục và động tác nghiêm túc; giảm hình dáng đồ chơi/ngộ nghĩnh</td>
+</tr>
+<tr>
+<td>Camera</td>
+<td>Mặt đất nhìn chéo từ phía sau/trên vai, thấy chiều sâu; bỏ camera trực diện từ đỉnh đầu. Ngắm phòng không chuyển sang ngôi thứ nhất</td>
+</tr>
+<tr>
+<td>Sinh tồn</td>
+<td>Shift chạy, stamina, cover, bleeding, băng gạc và cứu thương; đạn hạn chế, lấy thêm từ địch và thùng</td>
+</tr>
+<tr>
+<td>Đồng đội</td>
+<td>1–2 người đi theo; các cảnh có lực lượng giữ chốt/hỗ trợ ở xa, không tất cả cùng chạy theo</td>
+</tr>
+<tr>
+<td>Thông tin</td>
+<td>Phải đọc/nghe hội thoại để hiểu cách vượt màn; nhật ký cho đọc lại, không chỉ đi theo chấm vàng</td>
+</tr>
+<tr>
+<td>Mỹ thuật</td>
+<td>Map bớt sáng, đất/bùn/khói/công sự/nội thất, asset có chiều sâu; tối nhưng vẫn đọc được gameplay</td>
+</tr>
+<tr>
+<td>Streaming</td>
+<td>Đi tới đâu tải/vẽ tới đó với vành đệm; không render hoặc gửi toàn map/địch bí mật</td>
+</tr>
+<tr>
+<td>Màn riêng</td>
+<td>Giao liên Lượm, nhà dân, rừng/bẫy/phục kích, phòng không, chỉ huy và kíp xe có vòng chơi riêng</td>
+</tr>
+<tr>
+<td>Ngắm</td>
+<td>Nhân vật quay theo chuột, đạn bắn theo hướng; không đường kẻ nhân vật–chuột, không quỹ đạo/tâm nổ dự đoán</td>
+</tr>
+<tr>
+<td>Lịch sử</td>
+<td>Sau màn/chiến dịch có hồ sơ và trích dẫn lịch sử có nguồn, phân biệt rõ gameplay sáng tác</td>
+</tr>
+</tbody>
+</table>
+<p>Mục tiêu cảm xúc: căng thẳng nhưng hiểu tình huống; có đi, chờ, trò chuyện, ẩn náu và chăm sóc đồng đội xen giao tranh. Không phải mọi giây đều có địch xuất hiện.</p>
+<h2 id="2-hien-trang-va-cac-yeu-cau-cu-tiep-tuc-giu">2. Hiện trạng và các yêu cầu cũ tiếp tục giữ</h2>
+<p>Code hiện có ba chapter: 1 Điện Biên, 2 Củ Chi, 3 Tiến vào Dinh; map khoảng 1600 × 1000 unit, canvas từ trên xuống, mục tiêu cũ và AI đi theo. Nền P0 có xe nặng, pháo nạp 6 giây, đạn/nhiên liệu/tiếp tế hữu hạn, sửa xe, vật che, private snapshot và sequence/ACK. AI mặt đất Củ Chi còn dừng khi người chơi xuống hầm.</p>
+<p><strong>Chưa có:</strong> bleeding/băng gạc, loot từ địch, Shift chạy, hội thoại dẫn đường, streaming theo chunk, camera mới, nội thất nhà dân, bẫy, báo động theo tổ, Lượm, chỉ huy hoặc phòng không. Không dùng ảnh bản cũ để nói những phần này đã xong.</p>
+<p>Giữ authoritative simulation, loaded/reserve accounting, swept collision, giáp theo hướng thân xe, tự sát thương, vật che chặn nổ, inventory không reset khi reconnect/đổi vai. Classic vẫn riêng, Assault là môi trường thử combat xe; không tự áp mọi luật chiến dịch vào Classic. Spec P0 và ma trận W/A/M/C/F tiếp tục là đầu vào hồi quy, trừ giá trị/định hướng được thay rõ trong bản này.</p>
+<h2 id="3-o-dai-map-va-mat-o-ich">3. Độ dài, map và mật độ địch</h2>
+<p>Các con số dưới đây là <strong>mục tiêu prototype để playtest</strong>, không phải kết quả đã đạt hoặc quy mô hệ thống đã hỗ trợ.</p>
+<table>
+<thead>
+<tr>
+<th>Loại màn</th>
+<th>Thời lượng lần đầu</th>
+<th>Phân đoạn</th>
+<th>Phân bố lực lượng</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bộ binh/làng/rừng</td>
+<td>20–35 phút</td>
+<td>5–7</td>
+<td>4–6 encounter, khoảng 30–50 địch trên toàn tuyến; không bắt diệt hết</td>
+</tr>
+<tr>
+<td>Giao liên</td>
+<td>15–25 phút</td>
+<td>5–6</td>
+<td>4–5 vùng tuần tra/chốt, thắng bằng tránh phát hiện và giao đúng thư</td>
+</tr>
+<tr>
+<td>Địa đạo</td>
+<td>20–30 phút</td>
+<td>5–7</td>
+<td>Nhánh hầm, điểm mặt đất và tổ giữ cửa</td>
+</tr>
+<tr>
+<td>Kíp xe</td>
+<td>20–30 phút</td>
+<td>5–7</td>
+<td>Hậu cần, chướng ngại, đội hình và tiếp cận; không thêm địch ở sân Dinh</td>
+</tr>
+<tr>
+<td>Phòng không</td>
+<td>15–25 phút</td>
+<td>Chuẩn bị, 3–4 đợt, cao trào</td>
+<td>Nhiều pass/hướng bay, nghỉ tiếp tế và hiệp đồng cuối</td>
+</tr>
+<tr>
+<td>Vận tải Trường Sơn</td>
+<td>25–40 phút</td>
+<td>6–8</td>
+<td>Đoàn xe, trạm nghỉ, đoạn đường khó và cảnh báo; không bắt diệt địch</td>
+</tr>
+<tr>
+<td>Chỉ huy</td>
+<td>20–35 phút</td>
+<td>3 mục tiêu lớn có nhánh</td>
+<td>2–3 tổ của ta, chốt/tuần tra/tiếp viện hữu hạn</td>
+</tr>
+</tbody>
+</table>
+<p>Một encounter thử nghiệm có khoảng 6–10 địch, khởi đầu giới hạn 12–16 AI cần quyết định thường xuyên trong vùng giao tranh. Quân xa dùng lịch/simulation cấp khu vực, không biến mất vì camera không nhìn tới. Tăng số encounter trước khi tăng số AI trong cùng tick; đo CPU, path và snapshot.</p>
+<p>Map ngoài trời prototype gồm 4–6 khu, mỗi khu khoảng 1200–1800 unit một cạnh; kích thước tổng chốt theo route và checkpoint. Mỗi khu có mốc nhận diện, vật che, đường chính/đường vòng và lý do để tới. Không phóng to map cũ thành đất trống. Mỗi màn cần hai tuyến hoàn thành và một phương án rút/tiếp tế khi hụt đạn. Thời lượng đo loại trừ AFK; không lấy chờ thoại dài làm cách tăng độ dài.</p>
+<h2 id="4-camera-nhan-vat-chay-va-ban">4. Camera, nhân vật, chạy và bắn</h2>
+<h3 id="41-goc-cheo-va-ty-le-nhan-vat">4.1. Góc chéo và tỷ lệ nhân vật</h3>
+<p>Đích là góc nhìn thứ ba chéo từ phía sau/trên vai, thấy mặt bên và chiều sâu. Thử góc nhìn xuống khoảng 35–50°, phương hướng ổn định; chỉ thêm xoay camera khi không gây mất định hướng. Nhân vật thử cao 64–96 px ở zoom desktop chuẩn, tay/chân/súng/túi dễ đọc, không đầu quá to. Thử trên mobile trước khi chốt pixel/scale.</p>
+<p>Animation cần: idle, đi, chạy, khom, bò, áp cover, ngắm/bắn, nạp, băng bó, mang hàng, trúng đòn và hỗ trợ đồng đội. Props chắn camera được làm mờ/cắt lớp nhưng không mất collider hoặc lộ địch sau tường. Nhà có mái/tường occlusion riêng; nhìn thấy nhân vật không đồng nghĩa được nhìn xuyên toàn nội thất.</p>
+<p><strong>Hệ quả kỹ thuật:</strong> canvas hiện tại không thành ngôi ba/FPS chỉ bằng xoay tọa độ. R0 phải thử renderer có chiều sâu/camera/asset tương ứng. 2.5D prerender có thể dùng thử art; nếu cần orbit, che khuất và chuyển FPS liên tục cần đánh giá renderer 3D. Chưa chốt library/đổi engine, chưa mô tả camera mới là đã có. World coordinates, collision và renderer phải tách biệt.</p>
+<h3 id="42-ban-nhanh-hon-khong-aim-line">4.2. Bắn nhanh hơn, không aim line</h3>
+<p>Bộ binh xoay theo hướng chuột và bắn theo hướng đó. Với xe, tháp tiếp tục có tốc độ quay, đạn rời nòng theo hướng nòng thực. Được có crosshair nhỏ; <strong>không tia nối người–chuột, không đường ném dự đoán, không vòng tâm nổ trước impact</strong>.</p>
+<p>Vận tốc thử: bộ binh 1600–2400 unit/s; pháo 800–1200 unit/s thay vì 500 hiện tại, cân bằng theo map lớn. Đơn vị game, không là thông số khí tài thật. Swept collision bắt buộc để đạn nhanh không xuyên tường/xe. Dùng muzzle flash, âm và impact để phản hồi; nếu có tracer thì chỉ là đoạn ngắn theo viên đạn đã bắn, không là hướng dẫn ngắm hoặc một đường kéo dài tới chuột. Cover/LOS áp dụng cho cả ta và địch.</p>
+<h3 id="43-input-va-stamina">4.3. Input và stamina</h3>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Hành động dự kiến</th>
+<th>Giới hạn</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WASD</td>
+<td>Bộ binh di chuyển; xe tiến/lùi, quay thân</td>
+<td>Server xác nhận tốc độ/collider</td>
+</tr>
+<tr>
+<td>Giữ Shift</td>
+<td>Chạy nhanh</td>
+<td>Tốn stamina, tăng tiếng động, không dùng lúc băng bó/đoạn hầm quá hẹp</td>
+</tr>
+<tr>
+<td>C / Z</td>
+<td>Khom / bò</td>
+<td>Khác tốc độ/silhouette; không miễn thương</td>
+</tr>
+<tr>
+<td>Chuột / chuột trái / R</td>
+<td>Xoay-ngắm / bắn / nạp</td>
+<td>Đạn hữu hạn, không aim line</td>
+</tr>
+<tr>
+<td>E</td>
+<td>Trò chuyện, tương tác, nhặt đồ, vào nhà/hầm/khí tài</td>
+<td>Resolver và lựa chọn khi nhiều action hợp lệ</td>
+</tr>
+<tr>
+<td>F</td>
+<td>Băng bó/hỗ trợ; xe sửa theo ngữ cảnh</td>
+<td>Icon và action rõ, không nhầm kit/medkit</td>
+</tr>
+<tr>
+<td>G</td>
+<td>Ném lựu đạn</td>
+<td>Inventory, cooldown, animation; không preview đường ném</td>
+</tr>
+<tr>
+<td>B</td>
+<td>Dụng cụ bẫy trong màn cho phép</td>
+<td>Item và điểm gameplay hợp lệ</td>
+</tr>
+<tr>
+<td>Tab / 1–5</td>
+<td>Command mode / FOLLOW, HOLD, ADVANCE, AMBUSH, RETREAT</td>
+<td>Click đặt lệnh không bắn</td>
+</tr>
+<tr>
+<td>Esc</td>
+<td>Menu/nhật ký</td>
+<td>Không tự pause simulation thời gian thực</td>
+</tr>
+</tbody>
+</table>
+<p>Stamina thử: 100, chạy tiêu 18/s, hồi 12/s sau nghỉ 1,5 s; chạy khoảng 1,5 lần đi. Thương tích/mang hàng ảnh hưởng chạy. Đo theo thời gian server, không FPS/input count. Mobile có nút chạy/ngắm/băng bó, thiết kế ít tổ hợp ngón; blur xóa held input nhưng không xóa thương tích hoặc lệnh tổ.</p>
+<h2 id="5-bleeding-bang-gac-hoi-mau-va-loot">5. Bleeding, băng gạc, hồi máu và loot</h2>
+<h3 id="51-vong-thuong-tich">5.1. Vòng thương tích</h3>
+<p><strong>Trúng đòn → bị thương/chảy máu → tìm cover → băng bó → hết bleeding nhưng chưa đầy HP → hồi phục giới hạn/đến quân y.</strong> Các số là cân bằng game, không hướng dẫn y tế.</p>
+<ul>
+<li>Đòn hợp lệ có thể gây bleeding theo profile. Một trạng thái severity hữu hạn, có cooldown chống cộng dồn mọi viên thành vô hạn stack.</li>
+<li>Bleeding thử mất 0,5 HP/s, server quản lý. Có icon, máu nhẹ trên trang phục/dấu gần nhân vật, phản hồi thở; giảm FX/flash được nhưng vẫn hiểu trạng thái.</li>
+<li>Băng gạc mất khoảng 3 giây khi đứng an toàn, dừng bleeding nhưng không hồi đầy. Reserve một món lúc bắt đầu; hoàn lại nếu chưa xong mà bị ngắt; consume đúng một lần lúc xong. Chạy/trúng đòn có thể ngắt theo policy.</li>
+<li>Medkit khác băng: sau cầm máu, hồi thử 35 HP/5 giây khi an toàn. Không dùng thuốc để bỏ qua bleeding. Có thể tới gần hỗ trợ đồng đội bằng vật tư hữu hạn.</li>
+<li>Có alive/downed/dead và khoảng thời gian cứu ở màn chiến đấu. Reconnect/đổi actor/đổi camera/checkpoint không hồi sinh, reset thương tích hoặc sinh thêm đồ.</li>
+<li>Với giao liên nhỏ tuổi: thương tích thể hiện tiết chế, trọng tâm né tránh/nguy hiểm; không hiệu ứng đồ họa phóng đại.</li>
+</ul>
+<h3 id="52-vat-pham-tu-ich-va-map">5.2. Vật phẩm từ địch và map</h3>
+<table>
+<thead>
+<tr>
+<th>Vật phẩm</th>
+<th>Nguồn</th>
+<th>Quy tắc</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Băng gạc</td>
+<td>Trang bị ban đầu, trạm quân y, thùng và một số inventory địch</td>
+<td>Có điểm bảo đảm trên tuyến, không phụ thuộc RNG để tránh chết chắc</td>
+</tr>
+<tr>
+<td>Medkit</td>
+<td>Quân y/NPC hỗ trợ, thùng; một số địch có xác suất thấp</td>
+<td>Không hồi đầy tức thì hoặc sinh lại qua reload</td>
+</tr>
+<tr>
+<td>Đạn</td>
+<td>Thùng, kho, đồng đội chuyển và địch có loại phù hợp</td>
+<td>Kiểm tra tương thích/sức chứa, phần dư giữ lại</td>
+</tr>
+<tr>
+<td>Lựu đạn</td>
+<td>Loadout/kho hoặc địch phù hợp theo mission</td>
+<td>Số ít, không spam vô hạn</td>
+</tr>
+<tr>
+<td>Dụng cụ bẫy</td>
+<td>Màn rừng/tiếp tế định trước</td>
+<td>Chỉ trừ khi đặt thành công</td>
+</tr>
+</tbody>
+</table>
+<p>E lục/nhặt ở gần, có thời gian và có thể gây tiếng động. Loot gắn container ID và inventory server. Địch chết tạo loot theo inventory/quy tắc seed một lần, không reroll khi mở UI, quay camera hoặc reconnect. Snapshot chỉ gửi đồ được phép thấy; cùng một xác/hòm không farm qua checkpoint.</p>
+<p>Đông địch không đồng nghĩa phải diệt tất cả. Mỗi tuyến có budget đạn/băng/kho bảo đảm đủ giao tranh bắt buộc và fallback né/rút. Loot RNG là phần thưởng thêm; không là điều kiện duy nhất để khỏi softlock. Giữ loaded/reserve, phần dư và inventory từng đồng đội; không mọi loại súng dùng cùng đạn.</p>
+<h2 id="6-an-nap-bao-ong-luu-an-bay-va-ong-oi">6. Ẩn nấp, báo động, lựu đạn, bẫy và đồng đội</h2>
+<h3 id="61-mot-ich-thay-co-the-keo-ca-to">6.1. Một địch thấy có thể kéo cả tổ</h3>
+<p>State machine: tuần tra → nghi ngờ → kiểm tra dấu/tiếng động → phát hiện → gọi tổ/chạm trán → tìm vị trí cuối → giảm cảnh giới. Hô/radio có độ trễ, phạm vi và nhóm nhận tin; không toàn map biết tọa độ thật ngay lập tức. Cắt LOS bằng nhà/rừng/cover khiến địch điều tra vị trí cuối, chia hướng tìm, không bám vị trí server bí mật.</p>
+<p>Có cơ hội ngắt/cắt cảnh báo trước khi lan; tiếp viện hữu hạn có tuyến vào đọc được, không spawn ngay lưng người chơi. Địch dùng cover, nạp và đổi vị trí; không bắn/nhìn xuyên tường. Sound event có layer, bán kính, vật liệu chắn và ưu tiên. Cửa mở, đồ đổ, vật treo hoặc vật gây chú ý đánh dấu được hút tuần tra; không mỗi props đều có tác dụng và không click vô hạn để đóng băng AI.</p>
+<h3 id="62-luu-an-va-bay-rung">6.2. Lựu đạn và bẫy rừng</h3>
+<p>Lựu đạn server-owned có action ID, animation, đường bay/thời gian nổ và collider. Cover/friendly fire theo mission, không preview quỹ đạo/tâm nổ. Địch có thể phản ứng với cue nhưng không biết chính xác impact tương lai.</p>
+<p>Bẫy chỉ là cơ chế game trừu tượng: dùng item, chọn điểm thiết kế, chờ thao tác, chuyển armed/triggered/disarmed. Không mô tả cách chế tạo, vật liệu hay bố trí bẫy ngoài đời. Địch có khả năng phát hiện/vô hiệu hóa theo luật; đồng đội tránh điểm bẫy đã biết. Trap ID/state lưu checkpoint, retry không tạo bản sao.</p>
+<h3 id="63-hai-lop-ong-oi">6.3. Hai lớp đồng đội</h3>
+<ol>
+<li><strong>1–2 đồng đội đi theo:</strong> có tên/cá tính, HP, ammo, wounds, lệnh, thoại; giữ khoảng cách, tránh chắn cửa/hầm, biết tìm cover và nhắc thiếu đạn.</li>
+<li><strong>Lực lượng theo cảnh:</strong> quân giữ chốt, quân y, dẫn đường, tổ ở xa, tiếp ứng. Giữ vùng/vai riêng, không tất cả dồn theo người chơi; có hỗ trợ hỏa lực/thoại hoặc nhiệm vụ theo kịch bản.</li>
+</ol>
+<p>Quân xa có ảnh hưởng kết quả phải có state và simulation/event LOD; không vì ngoài camera mà bất tử hoặc ngừng bắn. Nhóm chỉ làm cảnh được ghi rõ là background. Màn phù hợp kiểm tra minimumSurvivors; không bắt mọi màn cùng một điều kiện.</p>
+<h2 id="7-hoi-thoai-giup-biet-cach-vuot-man">7. Hội thoại giúp biết cách vượt màn</h2>
+<p>Đối thoại phải cung cấp đường đi, dấu mốc, người cần gặp, cửa đúng, thời điểm an toàn hoặc điều kiện nhiệm vụ; không chỉ nói vài câu trước khi hiện tọa độ. Người chơi dùng thông tin đó để chọn đường, thời cơ và hành động.</p>
+<table>
+<thead>
+<tr>
+<th>Ngữ cảnh</th>
+<th>Câu thoại gameplay mẫu do thiết kế sáng tác</th>
+<th>Ý nghĩa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Giao liên</td>
+<td>“Đừng qua cầu. Tìm người gác cạnh mái nhà có đèn.”</td>
+<td>Đổi tuyến, nhận diện đúng NPC</td>
+</tr>
+<tr>
+<td>Nhà dân</td>
+<td>“Chờ tuần tra qua rồi hãy mở cửa sau.”</td>
+<td>Quan sát/đợi, dùng lối thoát</td>
+</tr>
+<tr>
+<td>Địa đạo</td>
+<td>“Qua bếp thì rẽ trái, kho ở cuối đoạn thấp.”</td>
+<td>Ghi nhớ dấu hiệu và nhánh hầm</td>
+</tr>
+<tr>
+<td>Phục kích</td>
+<td>“Giữ yên, đợi hiệu lệnh của tổ.”</td>
+<td>HOLD/AMBUSH thay vì tự bắn ngay</td>
+</tr>
+<tr>
+<td>Kíp xe</td>
+<td>“Dừng chỗ khuất, kiểm tra nhiên liệu trước khi đi.”</td>
+<td>Hậu cần và đội hình</td>
+</tr>
+<tr>
+<td>Phòng không</td>
+<td>“Có báo động. Đưa người vào chỗ trú rồi về vị trí.”</td>
+<td>Ưu tiên bảo vệ, không chỉ bắn</td>
+</tr>
+</tbody>
+</table>
+<p>Đây không là trích dẫn nhân vật thật. Dialogue node có ID/speaker/prerequisite/choices/journal/outcomes. Lựa chọn có tác dụng như đổi tuyến/người dẫn/thời điểm. NPC chết hoặc bỏ lỡ câu nói có fallback qua thư/đồng đội/nhật ký; không softlock. Bỏ animation/voice được nhưng thông tin thiết yếu lưu đọc lại; không bắt nghe âm thanh mới chơi được. Không thoại toàn tri làm lộ địch chưa quan sát.</p>
+<p>HUD chỉ hiện mục tiêu và tình báo đã nhận, không tự đánh dấu mọi bí mật. Có chế độ trợ giúp dựa trên thông tin đã biết. Subtitle đủ lớn, tốc độ đọc hợp lý; không đẩy đoạn thoại dài lúc giao tranh dồn dập. Thoại không lặp để farm vật tư/tiến trình.</p>
+<h2 id="8-i-toi-au-tai-va-render-toi-o">8. Đi tới đâu tải và render tới đó</h2>
+<p>Tách <strong>streaming asset</strong>, <strong>camera culling</strong> và <strong>server AOI/LOS</strong>. Giấu sprite không ngăn lộ dữ liệu; unload chunk không xóa quân/mục tiêu trên server.</p>
+<ul>
+<li>Chunk prototype 512 × 512 unit, ID ổn định cho props/tile/trigger. Vẽ vùng camera + buffer; preload 1–2 vòng theo hướng đi, unload LRU với ngân sách RAM/GPU. Shift/xe không được chạy nhanh hơn tốc độ tải dự phòng.</li>
+<li>Manifest/atlas theo biome/chapter, không tải toàn bộ texture chất lượng cao của chiến dịch trước trận. Chỉ loading ở điểm vào/khu lớn, không khựng ở mọi ranh chunk.</li>
+<li>Backend giữ world, gửi entity/delta theo AOI + LOS/layer; preload không kèm vị trí địch bí mật, loot chưa biết hoặc minimap toàn tri.</li>
+<li>Quân/sự kiện xa dùng simulation LOD có lịch/state. Bleed, reload, cảnh báo, đoàn tuần tra, mục tiêu bảo vệ vẫn tiến triển. Củ Chi không freeze surface khi xuống hầm.</li>
+<li>Nhà/hầm có portal/layer/occluder. Qua khu giữ đồ đang mang, wound, loot, thoại, companion và alert. Tải asset lỗi không thay collision, có fallback/retry giới hạn.</li>
+<li>Navgraph/pathfinding có budget; không tạo job mỗi packet chuột. Không đọc DB/tải file chậm trong tick combat.</li>
+</ul>
+<p>Mục tiêu đo đầu: 60 FPS desktop, 30 FPS mobile trung bình; p95 tick dưới khoảng 30 ms ở tick 100 ms; không đứng hình &gt;100 ms khi qua chunk trên tuyến thử. Ghi cấu hình máy và build; đây chưa là cam kết hiệu năng đã đạt.</p>
+<h2 id="9-khong-khi-thoi-chien-va-asset-can-bo-sung">9. Không khí thời chiến và asset cần bổ sung</h2>
+<h3 id="91-art-direction">9.1. Art direction</h3>
+<p>Đất/bùn/xanh rêu/xám khói, ánh sáng theo giờ/thời tiết/bối cảnh. Điện Biên có đất đào, hào, bao cát và dấu pháo; rừng có tán nhiều tầng, sương/ánh lọt lá; làng có nội thất/bếp/hàng rào/cửa sau; hầm có trần thấp/đèn nhỏ/âm vang. Dinh giữ nhận diện kiến trúc, không mặc định mọi màn đều đêm tối.</p>
+<p>Giảm sáng bản cũ nhưng giữ silhouette, vật tương tác và mép cover đọc được. Bóng, bụi, khói vừa phải, dấu chân, đồ dùng và âm xa tạo không khí; không phủ lớp đen/khói tới mức không chơi được.</p>
+<h3 id="92-backlog-asset-co-au-ra">9.2. Backlog asset có đầu ra</h3>
+<table>
+<thead>
+<tr>
+<th>Nhóm</th>
+<th>Asset cần chuẩn bị</th>
+<th>Nghiệm thu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nhân vật</td>
+<td>Bộ binh, đồng đội có nhận diện, Lượm, dân, quân y, địch đúng hồ sơ</td>
+<td>Tỷ lệ người, pose/hướng/animation dễ nhìn</td>
+</tr>
+<tr>
+<td>Địa hình</td>
+<td>Đất khô/ướt, bùn, cỏ, đường, ruộng, đá, lá</td>
+<td>Texture lặp kín, scale thống nhất, nav/collision tách hình</td>
+</tr>
+<tr>
+<td>Công sự</td>
+<td>Hào góc/ngã ba, bao cát, gỗ, công sự, cửa hầm</td>
+<td>Độ cao/cover đúng cả hai phía</td>
+</tr>
+<tr>
+<td>Làng</td>
+<td>Nhà mái ngói/tranh theo nguồn, cửa/nội thất/hàng rào/đồ dùng</td>
+<td>Vào/ra thật, occlusion, đồ gây chú ý có cue</td>
+</tr>
+<tr>
+<td>Rừng</td>
+<td>Cây/tán/bụi nhiều lớp, thân đổ, đường mòn, điểm bẫy game</td>
+<td>Ẩn nấp có luật, không đi xuyên collider</td>
+</tr>
+<tr>
+<td>Hầm</td>
+<td>Trần/tường đất hẹp, nhánh/dốc/phòng/cửa/đèn</td>
+<td>Ngột ngạt nhưng định hướng/di chuyển được</td>
+</tr>
+<tr>
+<td>Xe</td>
+<td>390/843, thân/xích/tháp hoặc rig, hậu cần/chướng ngại</td>
+<td>Hướng thân/nòng rõ, không dùng model sai niên đại</td>
+</tr>
+<tr>
+<td>Vận tải Trường Sơn</td>
+<td>Xe tải không kính, cabin, bánh/nhíp, thùng/bạt, bao lương thực, trạm giao nhận, đường rừng/dốc/ngầm và props sửa xe</td>
+<td>Hàng có vị trí/ID, xe khác tank về lái/trọng lượng; model/biên chế cần hồ sơ nguồn</td>
+</tr>
+<tr>
+<td>Phòng không</td>
+<td>Khí tài đúng vai, buồng ngắm FPS, máy bay/bom/shelter/quân xa</td>
+<td>Camera switch cùng ngôn ngữ hình ảnh</td>
+</tr>
+<tr>
+<td>Đồ/FX</td>
+<td>Thư, đạn, băng, medkit, hòm, bleeding nhẹ, flash/impact/khói</td>
+<td>Trạng thái phân biệt, không aim line</td>
+</tr>
+<tr>
+<td>Âm thanh</td>
+<td>Bước chân/bề mặt, thở, nạp, thoại/radio, hầm, cảnh giới</td>
+<td>Có subtitle/cue hình ảnh tương đương</td>
+</tr>
+</tbody>
+</table>
+<p>Nguồn tuyển chọn: <a href="https://polyhaven.com/license">Poly Haven</a> cho vật liệu/model nền, <a href="https://docs.ambientcg.com/license/">ambientCG</a> cho texture; hai nguồn công bố asset CC0. <a href="https://kenney.nl/support">Kenney</a> có asset CC0 cho greybox/prototype nếu phù hợp, không mặc định đáp ứng đích tả thực. <strong>Chưa tải/cài hoặc chọn xong pack</strong> trong lần viết docs. Asset có quyền dùng chưa chắc đúng bối cảnh Việt Nam; props đặc thù cần tự làm/đặt làm, không ghép nguyên làng châu Âu.</p>
+<p>Manifest mỗi asset: ID, nguồn trực tiếp, tác giả, license/file license, ngày lấy, biome, scale/pivot, collider proxy, animation/hướng, texture size/LOD, kiểm tra bối cảnh. Ưu tiên 1K/2K theo khoảng nhìn, atlas/LOD mobile; chốt ngân sách sau camera prototype. Không lấy ảnh bảo tàng/web làm texture khi chưa rõ quyền.</p>
+<h2 id="10-cac-y-tuong-uoc-tach-thanh-man-rieng">10. Các ý tưởng được tách thành màn riêng</h2>
+<p>Design ID dưới đây là <strong>đề xuất</strong>, chưa thêm runtime. Giữ ID cũ 1/2/3; displayOrder tách khỏi unlock/niên biểu. Không để một nhân vật sống qua tất cả thời kỳ.</p>
+<table>
+<thead>
+<tr>
+<th>Design ID</th>
+<th>Màn</th>
+<th>Vai riêng</th>
+<th>Chuỗi hành trình</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VN-01, runtime 1</td>
+<td>Đường hào Điện Biên làm lại</td>
+<td>Bộ binh + tổ</td>
+<td>Nhận lệnh/thoại → tiếp cận → bị thương/tiếp tế → chiếm giữ → tập kết đủ quân</td>
+</tr>
+<tr>
+<td>VN-02, runtime 2</td>
+<td>Mạch ngầm Củ Chi làm lại</td>
+<td>Giao liên + tổ giữ cửa</td>
+<td>Tránh tuần tra → hầm nhiều nhánh → mang cứu trợ → bệnh xá → đổi cửa ra → báo cáo</td>
+</tr>
+<tr>
+<td>VN-03, runtime 3</td>
+<td>Tiến vào Dinh, hành trình kíp xe</td>
+<td>Xe 390, đồng hành 843/đoàn xe</td>
+<td>Kiểm tra/thoại → tiếp liệu → chướng ngại/tuyến vòng mô phỏng → hội quân → cổng/sân</td>
+</tr>
+<tr>
+<td>VN-04, ID mới</td>
+<td>Lượm — Chuyến thư qua vùng nguy hiểm</td>
+<td>Cậu bé liên lạc, né tránh</td>
+<td>Nhận thư → hỏi đường → tránh chốt → ẩn náu → giao đúng người → kết chặng</td>
+</tr>
+<tr>
+<td>VN-05, ID mới</td>
+<td>Sau cánh cửa làng</td>
+<td>Bộ binh/giao liên, nhà dân</td>
+<td>Gặp người dẫn → vào nhà → đợi tuần tra → gây chú ý → cửa sau → đưa tổ ra</td>
+</tr>
+<tr>
+<td>VN-06, ID mới</td>
+<td>Dưới tán rừng</td>
+<td>Tổ phục kích</td>
+<td>Trinh sát/thoại → bố trí tổ/bẫy game → chờ thời cơ → giao tranh → lấy đồ → rút</td>
+</tr>
+<tr>
+<td>VN-07, ID mới</td>
+<td>Giữ bầu trời</td>
+<td>Dân quân/khẩu đội, hiệp đồng</td>
+<td>Báo động/sơ tán → tiếp đạn/trú ẩn → FPS ngắm → nhiều đợt → cao trào B-52 đúng vai lực lượng</td>
+</tr>
+<tr>
+<td>VN-08, ID mới</td>
+<td>Giữ chốt — Đánh chiếm</td>
+<td>Chỉ huy mini</td>
+<td>Đọc tình báo → bố trí tổ → nghi binh/yểm trợ → chiếm → giữ quân → tiếp ứng/rút</td>
+</tr>
+<tr>
+<td>VN-09, ID mới</td>
+<td>Xe không kính — Dọc Trường Sơn</td>
+<td>Chiến sĩ lái xe chở lương thực</td>
+<td>Nhận hàng/kiểm xe → nghe chỉ dẫn → theo đoàn → vượt đường khó → trú/nghỉ/sửa → đổi tuyến → giao hàng/kiểm đếm (§20)</td>
+</tr>
+</tbody>
+</table>
+<p>Các màn làng/rừng/chỉ huy có thể nằm trong một chương lớn nhưng phải là nhiệm vụ riêng với briefing/checkpoint/debrief. Ngày/đơn vị/trận mới cần hồ sơ nguồn trước khi chốt, không gán ngẫu nhiên để có thêm “sự kiện lịch sử”.</p>
+<h2 id="11-lam-lai-ba-man-ang-co">11. Làm lại ba màn đang có</h2>
+<h3 id="111-ien-bien">11.1. Điện Biên</h3>
+<p>Nhận quân/lệnh từ NPC, nghe chỉ dẫn tuyến hào/điểm gặp. 1–2 đồng đội theo, lực lượng khác giữ chốt xa. Hai tuyến: theo hào và vòng khu che; địch có cover, báo động và tiếp viện hữu hạn. Có tình huống băng bó/rút quân y; kho ở phía sau tạo quyết định ai giữ chốt/ai tiếp tế. Chiếm vùng khoảng 8 giây khi áp lực/quân số cho phép; cuối màn tập kết kiểm tra minimumSurvivors, không chỉ nhân vật chạm điểm vàng. Tuyến cụ thể là mô phỏng gameplay trong bối cảnh hồ sơ nguồn.</p>
+<h3 id="112-cu-chi">11.2. Củ Chi</h3>
+<p>Hầm hẹp hơn rõ, có đoạn một người, đoạn khom/bò, ngã ba, nhánh vòng, ngách cụt có dấu hiệu và nhiều cửa ra. Prototype 8–12 đoạn/nhánh, 3–4 điểm chức năng; không mê cung ngẫu nhiên thiếu chỉ dẫn. Thử nhiều tầng sau khi portal/path/asset đạt, không cho đổi layer tùy ý.</p>
+<p>Cảm giác ngột ngạt từ trần thấp/ánh sáng/âm/bố cục/nhịp, không bó collider gây kẹt. Có điểm rộng để đổi vị trí đồng đội, đội đi theo xếp hàng; tổ khác giữ cửa mặt đất. Surface tuần tra/báo động vẫn chạy khi người chơi xuống hầm; không damage xuyên layer.</p>
+<p>Hội thoại chỉ bếp/phòng/ngã rẽ; thư/cứu trợ có item ID, lượng và tốc độ mang, giao đúng nơi. E gần hòm/cửa/bệnh xá resolve đúng hoặc mở lựa chọn. Checkpoint giữ hàng, hòm cạn, AI và flags. Chưa thêm thiếu oxy như chỉ số bắt buộc khi chưa có thiết kế riêng.</p>
+<h3 id="113-kip-xe-390">11.3. Kíp xe 390</h3>
+<p>Thêm kiểm tra xe, liên lạc với đơn vị dẫn đường, tiếp nhiên liệu, sửa và chướng ngại/tuyến vòng có ý nghĩa. Độ khó từ phối hợp, đội hình và hậu cần; giao tranh giả định phải ghi rõ sáng tác. Không đặt tank địch ở sân Dinh để đáp ứng “địch ít”. Cổng có diễn hoạt tiếp cận/húc, không chỉ E rồi công trình biến mất. Giữ phân biệt xe 390 húc cổng chính và vai xe 843/Bùi Quang Thận trong hồ sơ/cảnh kết.</p>
+<h2 id="12-luom-va-an-nau-trong-nha-dan">12. Lượm và ẩn náu trong nhà dân</h2>
+<h3 id="121-luom-chuyen-thu">12.1. Lượm — Chuyến thư</h3>
+<p>Nhập vai Lượm theo cảm hứng văn học từ bài thơ của Tố Hữu; tuyến đi/thoại gameplay sáng tác. <a href="https://tohuu.org/">Bảo tàng Tố Hữu</a> liệt kê tác phẩm Lượm. Chưa coi tuyến chơi là tiểu sử/phục dựng sự kiện thật; cần hồ sơ riêng khi chốt nguyên mẫu/địa danh/thời gian. Không gán nhân vật vào mọi chiến dịch 1954/1972/1975.</p>
+<p>Thư có ID/người nhận/tình trạng. Người chơi quan sát, chạy đúng lúc, khom/bò, chờ tuần tra, nghe người dẫn và tìm nhà trú; tương tác vật gây chú ý để lách đường. Không biến màn giao liên thành màn trang bị hỏa lực diệt hàng loạt địch. Thắng khi giao đúng người và hoàn tất chặng; bị bắt/mất thư/fail theo điều kiện đã thông báo. Không tự thêm kết cục lịch sử chưa kiểm chứng; nếu chuyển thể đoạn kết văn học phải ghi rõ và tách khỏi tuyến vượt màn. Không chép dài bài thơ vào thoại trong bản spec này.</p>
+<h3 id="122-sau-canh-cua-lang">12.2. Sau cánh cửa làng</h3>
+<p>Nhà có nội thất/cửa trước-sau có tác dụng; vào nhà không tự xóa truy đuổi. Cửa, bóng tối, tiếng động và vật che ảnh hưởng phát hiện. Địch tìm vị trí cuối/có thể kiểm tra nhà theo alert, không nhìn xuyên tường. Người dân có thoại và phản ứng, không chỉ là điểm hồi HP. Có lựa chọn chờ, nhờ chỉ đường, đổi lối hoặc gây chú ý; không bắt gây hại dân để vượt màn.</p>
+<h2 id="13-phong-khong-ngoi-ba-khi-di-chuyen-ngoi-nhat-khi-ngam">13. Phòng không: ngôi ba khi di chuyển, ngôi nhất khi ngắm</h2>
+<h3 id="131-hai-camera-cung-mot-state">13.1. Hai camera cùng một state</h3>
+<p>Di chuyển giữa nơi trú, kho và khẩu đội dùng góc thứ ba chéo. E lên khí tài hợp lệ chuyển ngôi thứ nhất, có buồng ngắm/khí tài và bầu trời. E xuống trở về vị trí operator thật, không teleport. HP/ammo/heat/reload/thời gian đợt/mục tiêu bảo vệ không reset khi đổi góc. Một vị trí có một operator; thế giới mặt đất tiếp tục chạy khi đang ngắm.</p>
+<h3 id="132-cam-giac-ban-vit-voi-may-bay-nhanh">13.2. Cảm giác bắn vịt với máy bay nhanh</h3>
+<p>Máy bay bay thấp vào từ nhiều phía, lượn vài vòng giữa các lượt công kích theo kịch bản, thay vận tốc/độ cong theo đợt; không chỉ sprite chạy ngang một lần. Người chơi đón đường bằng crosshair/tốc độ quay, đạn có thời gian bay; không click sprite là chắc trúng. Không aim line hoặc marker “bắn vào đây”.</p>
+<p>Đợt có pass/máy bay hữu hạn và cue cảnh giới trước công kích. Ammo, burst, heat và khoảng nghỉ/tiếp đạn tạo nhịp. Bay vòng chỉ dành nhóm mục tiêu bay thấp được thiết kế cho minigame, không áp cho mọi loại hoặc B-52. Không spawn tấn công tức thì ngay khi chuyển camera.</p>
+<h3 id="133-bom-trung-thi-nhiem-vu-that-bai">13.3. Bom trúng thì nhiệm vụ thất bại</h3>
+<p>Tới cửa sổ công kích, máy bay thả bom có thời gian rơi/impact authoritative và cue công bằng; không vòng nổ tương lai. <strong>Bom trúng và phá hủy mục tiêu bắt buộc bảo vệ thì fail</strong>, dù số máy bay hạ cao. Bom trực tiếp hạ nhân vật trong lượt không có cứu cũng fail theo mission policy. Bom rơi trượt/vào khu an toàn không tự fail cả màn.</p>
+<p>Briefing chỉ rõ shelter/người/khẩu đội cần giữ. Có thời gian trú/sơ tán/chặn pass. Nếu mục tiêu mất và máy bay bị hạ cùng tick, xét fail trước reward. Retry tại checkpoint trước đợt, không ép chơi lại toàn bộ hành trình. Nếu thiết kế chọn “một hit phá hủy” cho mục tiêu cụ thể phải báo từ đầu, không mọi vật trong map đều là điểm fail bí mật.</p>
+<h3 id="134-finale-nhieu-ong-oi-cung-tham-chien-b-52">13.4. Finale nhiều đồng đội cùng tham chiến, B-52</h3>
+<p>Cao trào có nhiều đơn vị, radio, lực lượng ở xa và phản hồi hiệp đồng. <a href="https://sknc.qdnd.vn/theo-dong-su-kien/buoc-ngoat-lich-su-500814">Quân đội nhân dân — Bước ngoặt lịch sử</a> phân biệt vai bộ đội tên lửa đánh B-52 với lực lượng địa phương/dân quân đánh máy bay bay thấp.</p>
+<p>Giữ ý tưởng B-52 ở cuối màn bằng kíp tên lửa/phòng không phù hợp cùng hỗ trợ cảnh giới/tiếp tế/bảo vệ. Có thể chuyển người chơi sang vai trắc thủ trong phân đoạn riêng, hoặc chứng kiến kết quả hiệp đồng sau khi hoàn tất nhiệm vụ bảo vệ. Không mô tả súng trường hay góc ngắm bắn vịt của dân quân tự hạ B-52 tầm cao; B-52 không dùng quỹ đạo lượn cận cảnh của nhóm bay thấp. Cảnh kết là gameplay có giải thích, không gán chiến công cụ thể cho người/đơn vị khi thiếu nguồn.</p>
+<h2 id="14-chi-huy-mini-bay-binh-va-anh-chiem">14. Chỉ huy mini — bày binh và đánh chiếm</h2>
+<p>Điều khiển 2–3 tổ, chọn vùng giữ/tiếp cận, yểm trợ, nghi binh/phục kích rồi chiếm mục tiêu. Đổi về direct mode chỉ actor được phép, không reset tổ khác. Chỉ huy click đặt lệnh không khai hỏa và không pause world.</p>
+<p>FOLLOW/HOLD/ADVANCE/AMBUSH/RETREAT có command ID/ACK, waypoint/phase và lý do từ chối. HOLD không tự đuổi địch khỏi vùng; AMBUSH đợi điều kiện/hiệu lệnh; RETREAT ưu tiên đường rút. Lệnh thay thế có kiểm soát, không sinh vô hạn path job. Fog áp dụng bản đồ chỉ huy; tổ có đạn/wounds/suppression và cứu/chia đồ hữu hạn. Thắng theo giữ/chiếm và minimumSurvivors, không chỉ kill count. Đây là cơ chế game, không hướng dẫn chiến thuật thực địa.</p>
+<h2 id="15-sau-chien-dich-lich-su-va-trich-dan">15. Sau chiến dịch: lịch sử và trích dẫn</h2>
+<p>Mỗi màn có debrief gameplay và thẻ lịch sử: thời gian/địa điểm, sự kiện xác minh, vai lực lượng, nguồn trực tiếp, ảnh đủ quyền dùng và phần game sáng tác. Cuối chiến dịch lớn có tổng kết nối các chặng. Có thể đọc lại tư liệu/nhật ký ở hub; fail không được receipt thưởng hoàn thành.</p>
+<p>Trích đoạn phải ngắn, kiểm chứng nguyên văn, ghi tác giả/người nói và nguồn. Chưa có câu xác thực thì dùng <strong>tóm lược biên tập</strong>, không đặt ngoặc kép/gán danh nhân. Các câu thoại mẫu không là trích dẫn thật. Lượm ghi tác phẩm/tác giả và cảm hứng văn học; mỗi thời kỳ có nhân vật/trang phục/khí tài đúng hồ sơ.</p>
+<p>Thêm sự kiện lịch sử theo niên biểu khi có nguồn và vòng chơi có ý nghĩa, không chỉ thêm ngày/tên trận. Hồ sơ Điện Biên, Củ Chi, 30/4/1975 là nền; 12/1972 cần catalog riêng. Các màn mới chưa chốt ngày/đơn vị khi chưa thẩm định.</p>
+<p>Debrief ghi quân sống, đạn/băng/medkit/fuel dùng/còn, bị phát hiện, tuyến, mục tiêu và quyết định thoại; receipt thưởng đúng một lần. Người chơi hiểu mình vừa trải qua gì, không chỉ thấy chữ chiến thắng.</p>
+<h2 id="16-kien-truc-contract-va-checkpoint">16. Kiến trúc, contract và checkpoint</h2>
+<p>Giữ modular backend hiện tại, không đồng thời tách microservices. Trích dần Mission, Dialogue, Wound, Inventory/Loot, Perception/Alert, SquadCommand, WorldChunk/AOI, Interaction, Aircraft và ViewerSnapshot; tái dùng mechanics P0, không nhét tất cả vào VietnamGame.</p>
+<p>Snapshot versioned cần mission/segment/checkpoint, chunk references, actor transform/pose/weapon, bleeding/stamina, companion/order, visible contacts, prompt, inventory/loot được phép thấy, journal/dialogue, protected objectives và aircraft/bomb theo capability, lastCommandSeq. Không public dữ liệu địch/loot/plot chưa được biết.</p>
+<p>Command BANDAGE, LOOT, THROW_GRENADE, PLACE_TRAP, TALK/CHOICE, MOUNT, ORDER, INTERACT có seq/ID/validation/ACK/reason. Held fire/run/aim là input thay thế được, không replay loạt cũ khi reconnect. Session quyết định người/actor được điều khiển; không tin itemCount/playerId client khai.</p>
+<p>Checkpoint giữ RNG/seed/profile/version, HP/wounds/stamina/ammo/chamber/reload/fuel, loot/trap, nhóm/alert, win/fail, dialogue flags, hàng mang, shelter HP và receipts. Save giữa action/retry không trừ hai lần. Restart backend phải resume hoặc từ chối rõ, không tự tạo đầy đồ. Đây là công việc mới, hiện simulation vẫn ở RAM.</p>
+<p>Giữ runtime ID 1/2/3, thêm ID ổn định cho màn mới; displayOrder tách riêng. Tiến trình mới dùng tập completed/unlocked/prerequisites có version; migration idempotent giữ entitlement cũ. unlocked=3 không suy ra hoàn thành màn 3. Room giữ rules version được cấp, không đổi nghĩa chapter giữa trận.</p>
+<h2 id="17-thu-tu-trien-khai-moi">17. Thứ tự triển khai mới</h2>
+<table>
+<thead>
+<tr>
+<th>Đợt</th>
+<th>Đầu ra review được</th>
+<th>Điều kiện kết thúc</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R0</td>
+<td>Một đoạn làng/hào có người/camera chéo/asset/ánh sáng, chunk và bắn không aim line</td>
+<td>Duyệt ảnh/video và chơi thử desktop/mobile; đo renderer/preload, chưa nhân ra mọi map</td>
+</tr>
+<tr>
+<td>R1</td>
+<td>Shift, cover, bleeding/băng/medkit, loot/kho, báo động tổ, đồng đội theo/giữ chỗ</td>
+<td>10–15 phút có hai tuyến và fallback, không farm/softlock</td>
+</tr>
+<tr>
+<td>R2</td>
+<td>Một hành trình hoàn chỉnh Điện Biên hoặc làng, thoại dẫn, 5–7 phân đoạn, checkpoint/debrief</td>
+<td>Thời lượng/cảm giác đạt khi người thật chơi, không map trống</td>
+</tr>
+<tr>
+<td>R3</td>
+<td>Lượm, làng, phục kích rừng, Củ Chi phức tạp làm lần lượt</td>
+<td>Từng màn riêng đủ route/resource/nguồn, không chỉ tạo tên/nút</td>
+</tr>
+<tr>
+<td>R4</td>
+<td>Mini chỉ huy, hành trình kíp xe và màn vận tải Trường Sơn riêng</td>
+<td>Lệnh/giữ quân/đội hình có ý nghĩa; Dinh đúng vai; giao lương thực và checkpoint bảo toàn hàng</td>
+</tr>
+<tr>
+<td>R5</td>
+<td>Phòng không third-person/FPS, pass/bom/tiếp tế, finale B-52 hiệp đồng</td>
+<td>Hai camera cùng state, fail rõ/công bằng, đúng vai lực lượng</td>
+</tr>
+<tr>
+<td>R6</td>
+<td>Art/audio/lịch sử/cân bằng/mobile/performance</td>
+<td>Nghiệm thu mỗi màn và hồi quy game cũ</td>
+</tr>
+</tbody>
+</table>
+<p>R0–R6 thay thứ tự sản phẩm P1–P3 sau góp ý, không xóa việc chưa đóng P0. Chưa ước lượng ngày hoàn tất trước prototype renderer/asset.</p>
+<h2 id="18-oi-chieu-ay-u-tung-gop-y-moi">18. Đối chiếu đầy đủ từng góp ý mới</h2>
+<table>
+<thead>
+<tr>
+<th>Mã</th>
+<th>Góp ý</th>
+<th>Nghiệm thu / mục spec</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FB-01</td>
+<td>Địch ít</td>
+<td>Nhiều encounter/tổ, mật độ/budget/tiếp viện hữu hạn (§3/6)</td>
+</tr>
+<tr>
+<td>FB-02</td>
+<td>Trải nghiệm ngắn</td>
+<td>Đạt thời lượng có quyết định, trừ AFK/chờ giả (§3/10)</td>
+</tr>
+<tr>
+<td>FB-03</td>
+<td>Map nhỏ</td>
+<td>Nhiều khu, hai tuyến và đường rút; không đất trống (§3/8)</td>
+</tr>
+<tr>
+<td>FB-04</td>
+<td>Nhân vật ngộ nghĩnh/khó nhìn</td>
+<td>Tỷ lệ/pose/animation mới, duyệt zoom chuẩn/mobile (§4/9)</td>
+</tr>
+<tr>
+<td>FB-05</td>
+<td>Bleeding</td>
+<td>Trúng đòn tạo state/FX, HP server, không reset (§5)</td>
+</tr>
+<tr>
+<td>FB-06</td>
+<td>Băng gạc/hồi máu</td>
+<td>Cầm máu khác hồi HP, consume/reserve đúng (§5)</td>
+</tr>
+<tr>
+<td>FB-07</td>
+<td>Đồ rớt địch/map</td>
+<td>Container ID, loot/kho hữu hạn, không reroll (§5)</td>
+</tr>
+<tr>
+<td>FB-08</td>
+<td>1–2 đi theo, quân khác xa</td>
+<td>Hai loại nhóm có vai/vùng/state (§6.3)</td>
+</tr>
+<tr>
+<td>FB-09</td>
+<td>Hội thoại nhân vật</td>
+<td>Named speaker, phản ứng trạng thái, nhật ký (§7)</td>
+</tr>
+<tr>
+<td>FB-10</td>
+<td>Thoại để biết vượt màn</td>
+<td>Suy ra tuyến/NPC/thời điểm, fallback (§7)</td>
+</tr>
+<tr>
+<td>FB-11</td>
+<td>Map sáng/thiếu thời chiến</td>
+<td>Palette/props/audio theo bối cảnh vẫn dễ đọc (§9)</td>
+</tr>
+<tr>
+<td>FB-12</td>
+<td>Asset tả thực</td>
+<td>Backlog, manifest/license/scale/LOD, chưa tải (§9)</td>
+</tr>
+<tr>
+<td>FB-13</td>
+<td>Đi tới đâu render tới đó</td>
+<td>Chunk/culling/AOI, RAM ổn, không lộ địch (§8)</td>
+</tr>
+<tr>
+<td>FB-14</td>
+<td>Đạn chậm</td>
+<td>Vận tốc thử mới và swept collision (§4.2)</td>
+</tr>
+<tr>
+<td>FB-15</td>
+<td>Ta/địch ẩn nấp</td>
+<td>Cover/LOS hai phía, không nhìn xuyên (§6)</td>
+</tr>
+<tr>
+<td>FB-16</td>
+<td>Hành trình thực tế</td>
+<td>Thương tích/vật tư/thông tin xuyên phân đoạn (§3/16)</td>
+</tr>
+<tr>
+<td>FB-17</td>
+<td>Đạn hạn chế, lấy địch/thùng</td>
+<td>Budget bắt buộc, kho/loot/fallback (§5)</td>
+</tr>
+<tr>
+<td>FB-18</td>
+<td>Phòng không ngôi ba/ngôi nhất</td>
+<td>Switch mount đúng chỗ, không reset/pause (§13.1)</td>
+</tr>
+<tr>
+<td>FB-19</td>
+<td>Bay nhanh/lượn/bắn vịt</td>
+<td>Nhiều pass, aim có thời gian bay, không auto-hit (§13.2)</td>
+</tr>
+<tr>
+<td>FB-20</td>
+<td>Bom trúng thì fail</td>
+<td>Mục tiêu bắt buộc, policy rõ, fail trước reward (§13.3)</td>
+</tr>
+<tr>
+<td>FB-21</td>
+<td>Đồng đội/B-52 cao trào</td>
+<td>Hiệp đồng và vai tên lửa phù hợp (§13.4)</td>
+</tr>
+<tr>
+<td>FB-22</td>
+<td>Thêm lịch sử</td>
+<td>Nguồn/niên biểu/khí tài, không gán bừa (§10/15)</td>
+</tr>
+<tr>
+<td>FB-23</td>
+<td>Giữ Shift chạy</td>
+<td>Stamina/tốc độ/tiếng động server/mobile (§4.3)</td>
+</tr>
+<tr>
+<td>FB-24</td>
+<td>Góc quay chéo</td>
+<td>Thấy chiều sâu, không overhead cũ (§4.1)</td>
+</tr>
+<tr>
+<td>FB-25</td>
+<td>Lựu đạn/ẩn nấp</td>
+<td>Action/cover/impact, không preview (§6.2)</td>
+</tr>
+<tr>
+<td>FB-26</td>
+<td>Một địch kéo nhiều địch</td>
+<td>Alert có độ trễ/phạm vi/vị trí cuối (§6.1)</td>
+</tr>
+<tr>
+<td>FB-27</td>
+<td>Vào nhà dân</td>
+<td>Nội thất/cửa sau, không reset truy đuổi (§12.2)</td>
+</tr>
+<tr>
+<td>FB-28</td>
+<td>Hóa thân Lượm</td>
+<td>Màn giao thư riêng, chuyển thể ghi rõ (§12.1)</td>
+</tr>
+<tr>
+<td>FB-29</td>
+<td>Đồ vật gây chú ý</td>
+<td>Sound event/AI investigation/layer, không spam (§6.1)</td>
+</tr>
+<tr>
+<td>FB-30</td>
+<td>Bẫy rừng/phục kích</td>
+<td>Màn riêng, item/state/trigger/checkpoint (§6.2/10)</td>
+</tr>
+<tr>
+<td>FB-31</td>
+<td>Ý tưởng là màn riêng</td>
+<td>9 design ID, briefing/mission/debrief riêng (§10)</td>
+</tr>
+<tr>
+<td>FB-32</td>
+<td>Không kẻ đường tới chuột</td>
+<td>Không aim line rifle/grenade/FPS/map (§4.2)</td>
+</tr>
+<tr>
+<td>FB-33</td>
+<td>Lịch sử sau chiến dịch</td>
+<td>Trích đúng hoặc tóm lược, nguồn/đọc lại (§15)</td>
+</tr>
+<tr>
+<td>FB-34</td>
+<td>Chỉ huy bày binh/chiếm</td>
+<td>Tổ/lệnh ACK/fog/giữ quân (§14)</td>
+</tr>
+<tr>
+<td>FB-35</td>
+<td>Hầm chật/phức tạp/nhiều đường</td>
+<td>Nhánh/tư thế/lối thoát/ánh âm, không kẹt (§11.2)</td>
+</tr>
+<tr>
+<td>FB-36</td>
+<td>Xe không kính dọc Trường Sơn, lái chở lương thực</td>
+<td>Màn vận tải VN-09 riêng: đoàn xe/đường khó/thoại, bảo toàn xe-người-hàng, giao nhận có receipt (§20)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="hoi-quy-va-playtest">Hồi quy và playtest</h3>
+<p>Giữ W01–W12, A01–A08, M01–M11, C01–C03, F01–F06 ở spec P0. Bổ sung test: bandage/loot ngắt-retry bảo toàn đồ; bleed qua reconnect/checkpoint; stamina độc lập FPS; đạn nhanh không xuyên; grenade/trap ID không damage lặp; alert không toàn tri; dialogue không softlock; camera mount không reset; culling không xóa AI/sự kiện; nhà/hầm không lộ dữ liệu; bom/fail/reward có precedence; migration giữ chapter/entitlement; cargo manifest/transfer/loss/delivery không nhân bản hoặc trả thưởng lại; convoy không teleport khi đổi chunk.</p>
+<p>Playtest desktop/mobile mỗi màn, ghi build/profile, route, thời lượng, encounter, bị phát hiện, đạn/băng/medkit/fuel, quân sống, retry, thoại khó hiểu và mất phương hướng. Không dùng test xanh hoặc ảnh bản cũ để tuyên bố cảm giác/renderer mới đã đạt.</p>
+<h2 id="19-nguon-va-quyet-inh-can-lam-tiep">19. Nguồn và quyết định cần làm tiếp</h2>
+<ul>
+<li><a href="https://tohuu.org/">Bảo tàng Tố Hữu</a>: tác phẩm/cảm hứng Lượm; chưa đủ để khẳng định tiểu sử nguyên mẫu/tuyến game.</li>
+<li><a href="https://sknc.qdnd.vn/theo-dong-su-kien/buoc-ngoat-lich-su-500814">Quân đội nhân dân — Bước ngoặt lịch sử</a>: vai tên lửa và lực lượng chống bay thấp.</li>
+<li><a href="https://www.qdnd.vn/quoc-phong-an-ninh/nghe-thuat-quan-su-vn/khach-den-con-nhieu-chu-y-tiet-kiem-gao-680795">Quân đội nhân dân — Tiết kiệm tên lửa SAM-2 để diệt B-52</a>: nguồn bối cảnh, không sao chép quy trình tác chiến thành hướng dẫn.</li>
+<li><a href="https://polyhaven.com/license">Poly Haven</a>, <a href="https://docs.ambientcg.com/license/">ambientCG</a>, <a href="https://kenney.nl/support">Kenney</a>: nguồn tuyển asset; quyền API có thể khác quyền dùng file.</li>
+<li>Nguồn catalog Điện Biên/Củ Chi/Dinh tiếp tục là đầu vào thẩm định trước khi phát hành cảnh/quote mới. Chưa chốt lời trích danh nhân trong đợt này.</li>
+</ul>
+<p>Tiếp theo cần thử renderer và asset pipeline, chọn pack cụ thể đúng bối cảnh, đo thời lượng/mật độ, biên tập màn Lượm/finale B-52, định nghĩa mission và migration/save. Đây là công việc triển khai sau docs, không phải tính năng đã có.</p>
+<h2 id="20-xe-khong-kinh-doc-truong-son">20. Xe không kính — Dọc Trường Sơn</h2>
+<p><strong>Design ID:</strong> VN-09, runtime ID mới chưa cấp. <strong>Vai:</strong> chiến sĩ lái xe vận tải, nhiệm vụ chính chở lương thực tới điểm tiếp nhận. <strong>Trạng thái:</strong> thiết kế mới, chưa có gameplay/asset/ảnh capture. Đây là màn riêng, không đổi xe tăng thành xe tải bằng skin.</p>
+<h3 id="201-boi-canh-va-tinh-than">20.1. Bối cảnh và tinh thần</h3>
+<p>Lấy cảm hứng hình tượng người lính lái xe trong <em>Bài thơ về tiểu đội xe không kính</em> của Phạm Tiến Duật, kết hợp bối cảnh vận tải Trường Sơn. Theo <a href="https://baotanglichsu.vn/VI/Articles/3096/18043/djuong-truong-son-con-djuong-noi-hau-phuong-va-tien-tuyen.html">Bảo tàng Lịch sử quốc gia</a>, tuyến đường có vai trò vận chuyển người và nhu yếu phẩm giữa hậu phương và tiền tuyến. <a href="https://www.qdnd.vn/van-hoa/doi-song/bai-tho-ve-tieu-doi-xe-khong-kinh-410246">Báo Quân đội nhân dân</a> giới thiệu tác phẩm và tinh thần người lính vận tải.</p>
+<p>Tuyến, người lái, đối thoại và sự cố là sáng tác gameplay; chưa gắn một chuyến đi, binh trạm, model xe hoặc nguyên mẫu cụ thể khi chưa thẩm định. Không chép dài bài thơ thành thoại. Xe không kính phải thấy rõ cabin hở, gió/bụi/mưa và tương tác đồng đội, không chỉ thiếu một texture cửa sổ. Trọng tâm là đưa được hàng tới nơi, sự bền bỉ và tình đồng đội, không phải thi tốc độ hay đua bắn trên đường.</p>
+<h3 id="202-chuoi-hanh-trinh-68-phan-oan">20.2. Chuỗi hành trình 6–8 phân đoạn</h3>
+<table>
+<thead>
+<tr>
+<th>Chặng</th>
+<th>Việc người chơi làm</th>
+<th>Quyết định / thông tin cần dùng</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Nhận chuyến</td>
+<td>Gặp cán bộ giao hàng, kiểm đếm bao lương thực, nhận manifest/điểm giao</td>
+<td>Nghe điều kiện bảo toàn hàng, điểm tập kết và nguồn tiếp nhiên liệu</td>
+</tr>
+<tr>
+<td>2. Chuẩn bị xe</td>
+<td>Kiểm tra nhiên liệu, tình trạng xe, vật tư sửa, bạt/ràng hàng theo action game</td>
+<td>Chọn phần đồ mang theo trong giới hạn; không tự đầy mọi thứ khi xuất bến</td>
+</tr>
+<tr>
+<td>3. Vào tuyến</td>
+<td>Lái theo xe dẫn, nghe đồng đội chỉ mốc đường, qua vùng rừng/dốc</td>
+<td>Giữ đoàn, đọc biển/dấu/thoại; không có đường sáng dẫn thẳng trên mặt đất</td>
+</tr>
+<tr>
+<td>4. Đường khó</td>
+<td>Qua đoạn lầy, khúc cua, mặt đường hỏng hoặc ngầm mô phỏng</td>
+<td>Chậm mà giữ hàng, đổi tuyến hoặc chờ hỗ trợ theo mission; không mô phỏng kỹ thuật lái thực địa</td>
+</tr>
+<tr>
+<td>5. Dừng/nghỉ</td>
+<td>Tới điểm trú/nghỉ, sửa xe, tiếp liệu, gặp tổ giữ tuyến/công binh</td>
+<td>Hỏi tin chặng tới, kiểm tra kiện hỏng; có hội thoại đời thường xen căng thẳng</td>
+</tr>
+<tr>
+<td>6. Biến cố</td>
+<td>Có cảnh báo bom hoặc đường bị chặn, một xe bạn gặp sự cố</td>
+<td>Dừng ở điểm kịch bản cho phép, hỗ trợ/chuyển hàng nếu được, chọn tuyến dự phòng</td>
+</tr>
+<tr>
+<td>7. Chặng cuối</td>
+<td>Tập hợp đoàn, xử lý mưa/bụi/giảm tầm nhìn, tới điểm tiếp nhận</td>
+<td>Tài nguyên và hàng đã mất vẫn được giữ xuyên chặng; không reset cuối đoạn</td>
+</tr>
+<tr>
+<td>8. Bàn giao</td>
+<td>Dừng đúng vị trí, xuống xe, giao/kiểm đếm với NPC</td>
+<td>Xác nhận đủ hàng, xe/người theo mission rồi mới nhận kết quả và hồ sơ lịch sử</td>
+</tr>
+</tbody>
+</table>
+<p>Độ dài thử nghiệm 25–40 phút có đoạn yên, thoại và sự kiện có ý nghĩa; không tăng độ dài bằng giữ ga trong rừng trống. Có đường chính và đường vòng đạt được với budget nhiên liệu/hàng, checkpoint sau chặng an toàn.</p>
+<h3 id="203-lai-xe-camera-va-khong-khi">20.3. Lái xe, camera và không khí</h3>
+<p>Camera thứ ba chéo phía sau xe, cho nhìn chiều sâu mặt đường/đoàn xe; tự điều chỉnh vừa phải khi cua. Cabin không kính, hàng và tình trạng thùng đọc được. W/S ga-phanh/lùi, A/D lái, Space phanh tay khi cấu hình cho phép; hiển thị input theo mode. Khi xuống xe dùng input bộ binh, Shift chạy; không mặc định Shift biến xe tải thành xe tăng tốc vô hạn.</p>
+<p>Xe tải có gia tốc/phanh/bán kính cua, quán tính và tải hàng; va chạm/tốc độ xấu có thể làm giảm tình trạng xe và độ nguyên vẹn hàng. Mức phạt có cue, không mất hàng vô cớ ở mọi ổ gà. Lái khác tank quay tại chỗ, không mặc định gắn pháo hoặc yêu cầu bắn địch khi đang chở hàng.</p>
+<p>Bụi, gió/mưa vào cabin, đường rừng tối theo giờ, vệt bánh và ánh đèn hạn chế tạo không khí; có tùy chọn giảm rung/FX, không che toàn màn hoặc chỉ cho nghe cue mà không có subtitle. Giữ yêu cầu streaming: preload xa hơn theo tốc độ xe và đường cong; không lộ địch/biến cố bí mật qua chunk metadata.</p>
+<h3 id="204-hang-hoa-oan-xe-va-vat-tu-huu-han">20.4. Hàng hóa, đoàn xe và vật tư hữu hạn</h3>
+<p>Manifest server gồm cargo ID, loại, số lượng, tình trạng, xe đang giữ và điểm nhận. Prototype có thể dùng 12 bao lương thực, yêu cầu giao tối thiểu 8 bao nguyên vẹn; đây chỉ là số cân bằng game cần thử, không trọng tải xe thật. HUD ghi hàng còn/giao tối thiểu, độ nguyên vẹn xe, nhiên liệu và trạng thái đoàn. Xếp/giao/chuyển/thu hồi hàng đều có command ID/ACK, không tự giao chỉ vì xe đi ngang marker.</p>
+<p>Có 1 người đồng hành trong cabin hoặc hỗ trợ ở các điểm dừng; 1–2 xe bạn đi theo hoặc dẫn đường; lực lượng giữ tuyến/tiếp ứng ở xa thuộc các nhóm riêng. Xe AI giữ khoảng cách, chờ ở nút hẹp/điểm tập kết và có cách xử lý mắc đường; không đâm xuyên nhau hoặc teleport theo người chơi. Giao tiếp qua thoại/radio cung cấp mốc đường và thông tin chuyến đi. Không cho quân/hàng biến mất khi ra ngoài camera.</p>
+<p>Xăng, kit sửa và vật tư cứu thương hữu hạn ở trạm định trước. Nếu xe bạn hỏng, game có thể cho chuyển hàng sang xe còn chỗ tại điểm an toàn, không sao chép hàng hoặc reset hư hại. Mọi hàng chuyển đi giảm đúng ở nguồn và tăng đúng ở đích. Tài nguyên không tự đầy khi đổi xe, reconnect hoặc qua checkpoint.</p>
+<h3 id="205-thang-that-bai-va-luu-tien-trinh">20.5. Thắng, thất bại và lưu tiến trình</h3>
+<p>Thắng khi bàn giao đủ lượng/tình trạng hàng tối thiểu cho đúng NPC và đáp ứng yêu cầu xe/người của mission. Thất bại nếu người lái chết không còn cứu theo policy, xe/hàng bị phá tới mức không còn phương án giao tối thiểu, hoặc mất mục tiêu bắt buộc đã báo trước. Một bao rơi hoặc xe bạn tạm dừng không mặc định fail ngay. Bom trượt/đường hỏng là biến cố có cue và phương án, không fail ngẫu nhiên không thể phản ứng.</p>
+<p>Checkpoint giữ đoàn/xe/vị trí, manifest/loss/transfer/delivery, fuel/hư hại/kit, wounds, dialogue, trạng thái đường và biến cố, RNG và receipt bàn giao. Load lại không hồi kiện mất, nhận cùng hàng hai lần hoặc thưởng lại. Nếu không thể giao tối thiểu, UI giải thích lý do và cho retry checkpoint phù hợp thay vì softlock hết nhiên liệu giữa tuyến.</p>
+<p>Sau màn: thống kê lương thực giao được/mất, người và xe về đích, nhiên liệu/sửa đã dùng, quyết định hỗ trợ đoàn; thẻ lịch sử Trường Sơn và thông tin tác phẩm/tác giả có nguồn. Không gán lời thoại sáng tác thành câu thơ hoặc lời người thật.</p>
+<h3 id="206-nghiem-thu-rieng-vn-09">20.6. Nghiệm thu riêng VN-09</h3>
+<ul>
+<li>Lái xe tải trực tiếp được trên ít nhất hai tuyến; camera/đường đọc được ở desktop/mobile; chunk preload không khựng khi xe đạt tốc độ thiết kế.</li>
+<li>Giao thiếu/đúng/sai nơi cho kết quả rõ; va chạm/tổn thất có cue; không bắt tiêu diệt địch để thắng chuyến lương thực.</li>
+<li>Manifest bảo toàn qua chuyển xe, cargo rơi/thu hồi, retry/reconnect/checkpoint; receipt giao chỉ áp dụng một lần.</li>
+<li>Đoàn xe không đâm xuyên/teleport, xử lý đường hẹp/tắc và chờ tập kết có thể tiếp tục nhiệm vụ.</li>
+<li>Thử nhánh thiếu nhiên liệu, xe bạn hỏng, đường chính bị chặn, còn sát ngưỡng hàng và retry sau bàn giao.</li>
+<li>Chốt hồ sơ nguồn/model xe và art không kính trước khi công bố là phục dựng lịch sử; ảnh gameplay chỉ chụp sau khi màn tồn tại.</li>
+</ul></main></body></html>

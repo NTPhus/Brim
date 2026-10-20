@@ -1,0 +1,34 @@
+{
+  "capturedAt": "2026-10-20T03:49:46.669Z",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "url": "/game/vietnam/940ef548-7e3d-4123-b10c-55723281dafd",
+  "chapter": 3,
+  "objective": 3,
+  "layer": 0,
+  "status": "FINISHED",
+  "hp": 1200,
+  "ammo": 1,
+  "reserve": 7,
+  "tactical": {
+    "rulesVersion": "tactical-standard-1",
+    "weapon": {
+      "state": "READY",
+      "chamber": 1,
+      "reserve": 7,
+      "remainingMs": 0
+    },
+    "speed": 45,
+    "fuel": 1432.7142857142878,
+    "fuelCapacity": 3000,
+    "repairKits": 1,
+    "repairRemainingMs": 0,
+    "settled": false,
+    "range": 700,
+    "lastCommandSeq": 0,
+    "commandStatus": ""
+  },
+  "revision": 521
+}

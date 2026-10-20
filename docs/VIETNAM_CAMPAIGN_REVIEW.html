@@ -1,0 +1,1263 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Dấu chân Việt — review ảnh baseline và yêu cầu thiết kế v2</title><style>
+@page { size: A4; margin: 15mm 12mm; }
+* { box-sizing: border-box; }
+body { font: 15px/1.7 "DejaVu Sans", "Segoe UI", sans-serif; color:#25322e; background:#f4f2e9; margin:0; }
+main { max-width:1120px; margin:32px auto; padding:48px; background:white; }
+h1,h2,h3 { line-height:1.3; color:#234638; }
+h1 { font-size:32px; border-bottom:4px solid #b69753; padding-bottom:20px; }
+h2 { font-size:25px; margin-top:48px; padding-top:16px; border-top:1px solid #d9ddcf; }
+h3 { font-size:19px; margin-top:28px; }
+img { display:block; width:100%; height:auto; margin:18px auto 8px; border:1px solid #bbc7b8; }
+table { width:100%; border-collapse:collapse; margin:18px 0; font-size:12px; line-height:1.6; }
+th,td { border:1px solid #cdd5c7; text-align:left; vertical-align:top; padding:9px; overflow-wrap:anywhere; }
+th { background:#e9edde; color:#244333; }
+tr:nth-child(even) { background:#f7f8f2; }
+a { color:#356955; } code { font-size:.9em; overflow-wrap:anywhere; }
+pre { background:#eef1e7; padding:16px; white-space:pre-wrap; }
+blockquote { border-left:4px solid #b69753; padding-left:18px; }
+@media print {
+ body { background:white; font-size:10px; line-height:1.55; }
+ main { margin:0; padding:0; max-width:none; }
+ h1 { font-size:25px; } h2 { font-size:19px; break-before:page; border-top:0; margin-top:0; }
+ h3 { font-size:14px; break-after:avoid; }
+ table { font-size:8px; } th,td { padding:5px; } tr { break-inside:avoid; }
+ img { max-height:225mm; object-fit:contain; break-inside:avoid; }
+ p { orphans:3; widows:3; } a { color:inherit; text-decoration:none; }
+}
+</style></head><body><main><h1 id="dau-chan-viet-review-anh-baseline-va-yeu-cau-thiet-ke-v2">Dấu chân Việt — review ảnh baseline và yêu cầu thiết kế v2</h1>
+<p><strong>Ngày lập:</strong> 20/10/2026 · <strong>Mã nguồn nền:</strong> <code>7853f00</code> và working tree hiện tại · <strong>Profile:</strong> <code>tactical-standard-1</code>.</p>
+<p>Tài liệu giữ ảnh bản chơi ngày 20/10 để đối chiếu. <strong>Sau góp ý của bạn, hướng thiết kế đã thay đổi:</strong> xem <a href="VIETNAM_CAMPAIGN.md">đặc tả v2 đầy đủ</a>, <a href="VIETNAM_CAMPAIGN.html">HTML</a> hoặc <a href="VIETNAM_CAMPAIGN.pdf">PDF</a>. Các mục 1–10 bên dưới mô tả baseline P0 và yêu cầu cũ; tham chiếu mục/phase ở đó thuộc <a href="archive/VIETNAM_CAMPAIGN_P0_2026-10-19.md">spec P0 lưu trữ</a>. Mục 11 cập nhật toàn bộ góp ý mới. Không sửa gameplay hoặc tạo ảnh giả tính năng mới trong đợt docs này.</p>
+<p><strong>Bộ review gồm:</strong> 22 ảnh thực tế, hồ sơ và chuỗi nhiệm vụ của cả ba màn, ảnh bố cục mobile, 24 nhóm đối chiếu yêu cầu, danh sách phần chưa triển khai và phiếu góp ý theo mã ảnh.</p>
+<table>
+<thead>
+<tr>
+<th>Màn</th>
+<th>Kết quả tuyến chụp</th>
+<th>Tài nguyên khi hoàn thành</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Điện Biên</td>
+<td>Hoàn thành</td>
+<td>40/100 HP, băng 4, dự trữ 24</td>
+</tr>
+<tr>
+<td>Củ Chi</td>
+<td>Hoàn thành, trở lại mặt đất</td>
+<td>100/100 HP, băng 12, dự trữ 24</td>
+</tr>
+<tr>
+<td>Tiến vào Dinh</td>
+<td>Hoàn thành, không khai hỏa</td>
+<td>1.200/1.200 HP, 1 viên đã nạp + 7 dự trữ, nhiên liệu khoảng 47,8%</td>
+</tr>
+</tbody>
+</table>
+<p>Đây là kết quả chạy tuyến bằng thao tác UI tự động để chụp ảnh, <strong>chưa phải nghiệm thu cảm giác gameplay của người chơi thật</strong>. Các số không đại diện cho mọi tuyến hoặc mọi cách chơi.</p>
+<blockquote>
+<p><strong>Ưu tiên review mới:</strong> map lớn và hành trình dài; camera thứ ba chéo, người dễ nhìn và asset nghiêm túc; Shift, bleeding/băng gạc, loot, cover và báo động; hội thoại chỉ cách qua màn; hầm hẹp nhiều nhánh; màn riêng Lượm/làng/rừng/phòng không/chỉ huy. Các ảnh dưới đây là bản cũ cần thay đổi, không là hình ảnh của thiết kế v2.</p>
+</blockquote>
+<h2 id="1-cach-oc-va-pham-vi-anh">1. Cách đọc và phạm vi ảnh</h2>
+<ul>
+<li><strong>Đã có trong code:</strong> tìm thấy logic/config tương ứng; không đồng nghĩa đã cân bằng hoặc nghiệm thu.</li>
+<li><strong>Ảnh thực tế:</strong> chụp Chrome từ frontend Vue/canvas đang nhận snapshot backend local; không phải ảnh concept hay AI tạo.</li>
+<li><strong>Còn thiếu:</strong> yêu cầu trong đặc tả chưa có triển khai đầy đủ. Không dùng ảnh màn hiện tại để khẳng định phần này đã hoàn thành.</li>
+<li><strong>Cần nghiệm thu:</strong> cần người chơi đánh giá nhịp độ, độ khó, đường đi và cảm giác điều khiển.</li>
+</ul>
+<p>Ảnh desktop dùng viewport 1440 × 1000; ảnh mobile dùng 390 × 844. Ảnh giữ nguyên giao diện, không vẽ thêm địch, công trình hoặc hiệu ứng. JSON đi kèm các ảnh tình huống ghi thời điểm UTC, viewport và trạng thái khi chụp; giờ Việt Nam bằng UTC+7. Phiên guest riêng được mở quyền vào màn 1–3 để review; thao tác này chỉ bỏ qua khóa hồ sơ, không bỏ va chạm, tài nguyên, mục tiêu hoặc điều kiện thắng trong trận. Vì vậy ảnh không phải bằng chứng cho luồng mở khóa tự nhiên.</p>
+<h3 id="muc-tieu-trai-nghiem-can-ban-anh-gia">Mục tiêu trải nghiệm cần bạn đánh giá</h3>
+<table>
+<thead>
+<tr>
+<th>Mã</th>
+<th>Yêu cầu trước đó</th>
+<th>Dấu hiệu đạt khi chơi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EXP-01</td>
+<td>Xe nặng, pháo nạp lâu, không giữ bắn để bỏ qua luật</td>
+<td>Cảm nhận gia tốc, quay thân/tháp và khoảng chờ giữa hai phát</td>
+</tr>
+<tr>
+<td>EXP-02</td>
+<td>Giữ quân, che chắn và trinh sát có ý nghĩa</td>
+<td>Đi theo hào/cover giữ lực lượng tốt hơn chạy thẳng</td>
+</tr>
+<tr>
+<td>EXP-03</td>
+<td>Tài nguyên hữu hạn buộc đổi kế hoạch</td>
+<td>Hết đạn/nhiên liệu phải tìm tiếp tế hoặc rút; reconnect không refill</td>
+</tr>
+<tr>
+<td>EXP-04</td>
+<td>Không lộ thông tin tương lai</td>
+<td>Không có vòng tròn tâm nổ dự đoán, địch khuất không hiện qua minimap</td>
+</tr>
+<tr>
+<td>EXP-05</td>
+<td>Vai trò khác nhau về hành động và giới hạn</td>
+<td>Bộ binh, kíp xe, chỉ huy, dân quân có vòng chơi riêng; hai vai cuối còn thiếu</td>
+</tr>
+<tr>
+<td>EXP-06</td>
+<td>Mỗi màn có hai tuyến và một phương án dự phòng</td>
+<td>Hoàn thành được bằng cách thận trọng và cách vòng/rút; hiện chưa nghiệm thu</td>
+</tr>
+<tr>
+<td>EXP-07</td>
+<td>Tôn trọng bối cảnh, phân biệt nội dung sáng tác</td>
+<td>Không biến màn Dinh thành nhiệm vụ bắn phá Dinh; nhân vật hư cấu được ghi rõ</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-tong-quan-cac-ho-so">2. Tổng quan các hồ sơ</h2>
+<p><img alt="HUB-01 — Hồ sơ chiến dịch trên desktop" src="images/vietnam-review/00-hub.png" /></p>
+<p><strong>HUB-01:</strong> trang <code>/vietnam</code>. Ảnh chụp viewport; các ảnh hồ sơ bên dưới cho thấy lần lượt từng thẻ ở vị trí dễ đọc hơn.</p>
+<table>
+<thead>
+<tr>
+<th>ID ổn định</th>
+<th>Màn đang có</th>
+<th>Vai trực tiếp</th>
+<th>Chuỗi mục tiêu hiện tại</th>
+<th>Trọng tâm góp ý</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Đường hào Điện Biên</td>
+<td>Bộ binh hư cấu, hai AI đồng đội</td>
+<td>Điểm liên lạc → chiếm công sự → tập kết</td>
+<td>Hào, cover, phối hợp, lượng đạn</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Mạch ngầm Củ Chi</td>
+<td>Giao liên hư cấu</td>
+<td>Vào hầm → lấy cứu trợ → bệnh xá → ra cửa B</td>
+<td>Nhận biết lối đi, ưu tiên E, cảm giác mang hàng</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Tiến vào Dinh</td>
+<td>Kíp xe 390, xe 843 đồng hành</td>
+<td>Hội quân → tương tác cổng → vào sân</td>
+<td>Xe nặng, đội hình, hành trình và bối cảnh</td>
+</tr>
+<tr>
+<td>Chưa có ID trong catalog</td>
+<td>Dân quân phòng không</td>
+<td>Vai dự kiến, chưa chơi được</td>
+<td>Chuẩn bị → báo động → sơ tán → phòng không → cứu trợ</td>
+<td>Thiết kế P3; không có ảnh gameplay thực tế</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Ranh giới sản phẩm:</strong> Tank Classic là chế độ riêng; Tank Assault là nơi thí điểm chiến đấu xe nặng; Dấu chân Việt là chiến dịch riêng. Không áp luật chiến dịch vào Classic. Các hồ sơ 1/2/3 không được đổi nghĩa khi thêm màn phòng không.</p>
+<h2 id="3-man-1-uong-hao-ien-bien">3. Màn 1 — Đường hào Điện Biên</h2>
+<h3 id="31-ho-so-va-vai-nhap">3.1. Hồ sơ và vai nhập</h3>
+<p><img alt="DB-01 — Hồ sơ Điện Biên" src="images/vietnam-review/01-briefing.png" /></p>
+<p>Theo catalog trong repo: bối cảnh Điện Biên Phủ 1954; vai người chơi là chiến sĩ hư cấu, đồng đội An/Bình là nhân vật hư cấu. Địa hình, vị trí chiến đấu và tuyến đi là mô phỏng gameplay. Tài liệu review không kiểm chứng lịch sử độc lập; nguồn nền nằm trong thẻ hồ sơ và <code>VietnamCampaign.java</code>.</p>
+<p><strong>Trang bị hiện tại:</strong> 100 HP, băng 12 viên, dự trữ 24 viên, thay băng 3 giây. Đi thường 65 unit/s, khom 35 unit/s. Hai hòm đạn ban đầu mỗi hòm 24 viên; tiếp tế hữu hạn. AI đồng đội cũng có băng và dự trữ hữu hạn.</p>
+<h3 id="32-cac-buoc-choi-hien-tai">3.2. Các bước chơi hiện tại</h3>
+<table>
+<thead>
+<tr>
+<th>Bước</th>
+<th>Hành động / mốc world unit</th>
+<th>Điều kiện qua bước</th>
+<th>Rủi ro cần xem</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Xuất phát</td>
+<td>Từ khoảng (120,800), đi theo hào đứng</td>
+<td>Còn sống, đi qua được địa hình</td>
+<td>Có hiểu ai là người chơi và đâu là đồng đội?</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Tới điểm liên lạc gần (400,390)</td>
+<td>Vào vùng mục tiêu đúng layer</td>
+<td>Hiện chủ yếu là đi tới điểm; chưa có trinh sát/ra lệnh</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Tiếp cận công sự gần (780,210), nhấn E</td>
+<td>Không còn địch sống trong bán kính kiểm tra 210 quanh mục tiêu</td>
+<td>Chưa có giữ vùng 8 giây hoặc điều kiện quân số theo mission definition</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Đưa nhân vật tới điểm tập kết gần (1430,160)</td>
+<td>Vào vùng mục tiêu và chưa thất bại</td>
+<td>Chưa phải kiểm tra đầy đủ quân số tổ về điểm tập kết</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="DB-02 — Điểm xuất phát và HUD bộ binh" src="images/vietnam-review/01-start.png" /></p>
+<p><strong>DB-02:</strong> HUD trên cùng thể hiện HP, băng/dự trữ, layer và thời gian. Khung nhiệm vụ ở góc trái; điểm vàng là mục tiêu hiện tại. Hòm chữ A là đạn; minimap ở góc dưới phải.</p>
+<p><img alt="DB-03 — Tiếp cận theo chiến hào" src="images/vietnam-review/01-trench.png" /></p>
+<p><strong>DB-03:</strong> xem chiều rộng hào, khả năng đọc đường đi và cách camera giữ nhân vật. Đây là tuyến hào đang chơi được, chưa chứng minh tuyến thứ hai đã được nghiệm thu.</p>
+<p><img alt="DB-04 — Sau loạt giao chiến, trước bước chiếm công sự" src="images/vietnam-review/01-combat.png" /></p>
+<p><strong>DB-04:</strong> tại thời điểm ảnh, nhân vật còn 40 HP, 4 viên trong băng và 24 dự trữ; không còn địch sống trong snapshot nhìn thấy. Quan sát vai trò hỗ trợ của AI và mức dễ đọc của thanh HP/đạn. Ảnh không đủ chứng minh thuật toán suppression hoặc chỉ huy, vì hai phần đó chưa có.</p>
+<p><img alt="DB-06 — Điểm tiếp cận trước loạt giao chiến" src="images/vietnam-review/01-contact.png" /></p>
+<p><strong>DB-06:</strong> tình huống ở đầu hào tiến công, trước phần bắn của tuyến review; có thể so sánh HP/đạn với DB-04.</p>
+<p><img alt="DB-07 — Đứng gần điểm chiếm công sự" src="images/vietnam-review/01-bunker.png" /></p>
+<p><strong>DB-07:</strong> vị trí tương tác công sự. Dùng ảnh này để góp ý khoảng cách E, nhãn mục tiêu và độ rõ của vật cản; không xem một khung hình là bằng chứng đã giữ vùng đủ 8 giây.</p>
+<p><img alt="DB-05 — Kết quả chạy tuyến review Điện Biên" src="images/vietnam-review/01-result.png" /></p>
+<h3 id="33-so-voi-yeu-cau-thiet-ke-lai">3.3. So với yêu cầu thiết kế lại</h3>
+<p><strong>Đã có:</strong> hào, vật cản, địch/đồng đội, bắn/nạp hữu hạn, khom người, tiếp tế, mục tiêu công sự và điểm tập kết.</p>
+<p><strong>Còn thiếu:</strong> nhận quân/loadout có lựa chọn thực; trinh sát và trí nhớ phát hiện; HOLD/AMBUSH/ADVANCE/RETREAT; đổi actor; suppression/downed/cứu thương; chiếm giữ liên tục khoảng 8 giây; kiểm tra minimumSurvivors; bố trí và nghiệm thu hai tuyến cùng tuyến dự phòng; tổng kết quân số, tài nguyên và cách tiếp cận.</p>
+<p><strong>Tuyến review hiện tại:</strong> hào đứng → hào ngang → đoạn hào tiến công → công sự → vòng phía trên vật cản tới tập kết. Tuyến ngoài hào và đường rút về kho chỉ là phương án cần thiết kế/playtest, chưa công bố là tuyến hoàn thành đã cân bằng.</p>
+<h3 id="34-gop-y-can-chot-cho-ien-bien">3.4. Góp ý cần chốt cho Điện Biên</h3>
+<ol>
+<li>Bạn muốn màn tập trung vào sinh tồn trong hào, chiếm công sự hay chỉ huy tổ?</li>
+<li>Hào và công sự đã đủ gợi bối cảnh chưa; cần bổ sung chi tiết nào trước?</li>
+<li>Việc ngắm, xác định địch và nhìn đồng đội có khó vì nhân vật nhỏ không?</li>
+<li>Khi còn ít đạn, nên ưu tiên rút lấy đạn hay giao AI giữ chốt?</li>
+<li>Điều kiện tập kết nên yêu cầu tối thiểu bao nhiêu người sống?</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Mã góp ý</th>
+<th>Ảnh / bước</th>
+<th>Hiện tại thấy gì</th>
+<th>Muốn đổi thế nào</th>
+<th>P0/P1/P2/P3</th>
+<th>Tiêu chí chấp nhận</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DB-F01</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>DB-F02</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>DB-F03</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-man-2-mach-ngam-cu-chi">4. Màn 2 — Mạch ngầm Củ Chi</h2>
+<h3 id="41-ho-so-va-vai-nhap">4.1. Hồ sơ và vai nhập</h3>
+<p><img alt="CC-01 — Hồ sơ Củ Chi" src="images/vietnam-review/02-briefing.png" /></p>
+<p>Theo catalog: bối cảnh địa đạo giai đoạn 1961–1967, không gán thành một trận đánh cụ thể. Người chơi là giao liên hư cấu. Bản chơi chỉ có mặt đất và một layer ngầm; không phải phục dựng địa đạo đúng tỷ lệ hay mô phỏng không khí.</p>
+<p>Trang bị bộ binh giống màn 1. Có kho đạn mặt đất và kho đạn dưới hầm. Không thể dùng việc bắn dưới hầm để gây sát thương lên mặt đất.</p>
+<h3 id="42-cac-buoc-choi-hien-tai">4.2. Các bước chơi hiện tại</h3>
+<table>
+<thead>
+<tr>
+<th>Bước</th>
+<th>Hành động / mốc world unit</th>
+<th>Điều kiện qua bước</th>
+<th>Nội dung cần góp ý</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Tới cửa A gần (215,755), E xuống hầm</td>
+<td>Đổi layer tại cửa thật, tới vùng mục tiêu layer 1</td>
+<td>Cửa đủ nổi bật không? Có biết E để xuống?</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Theo trục hầm tới nhánh (710,760), lên kho (710,320), E</td>
+<td>Đúng vùng tương tác nhiệm vụ</td>
+<td>Hiện chủ yếu là chuyển objective, chưa có vật phẩm mang độc lập</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Quay lại trục hầm, tới bệnh xá (1180,760), E</td>
+<td>Tương tác mục tiêu ưu tiên</td>
+<td>Cần phản hồi rõ đang mang gì và đã giao gì</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Tới cửa B gần (1155,755), E lên mặt đất</td>
+<td>Đúng cửa/layer rồi tới vùng hoàn thành</td>
+<td>Bệnh xá và cửa gần nhau; phải xem ưu tiên E</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="CC-02 — Mặt đất và cửa vào địa đạo" src="images/vietnam-review/02-start.png" /></p>
+<p><img alt="CC-07 — Tiếp cận cửa hầm A trước khi xuống" src="images/vietnam-review/02-entrance.png" /></p>
+<p><img alt="CC-03 — Trong địa đạo, layer ngầm và bản đồ" src="images/vietnam-review/02-underground.png" /></p>
+<p><strong>CC-03:</strong> quan sát độ tối, bề rộng hành lang, vùng nhìn và minimap. Nhân vật chỉ đi trong volume hầm; phần nền đen không phải vùng có thể đi tự do.</p>
+<p><img alt="CC-04 — Kho cứu trợ và nhánh hầm" src="images/vietnam-review/02-depot.png" /></p>
+<p><img alt="CC-05 — Giao cứu trợ tại bệnh xá" src="images/vietnam-review/02-infirmary.png" /></p>
+<p><img alt="CC-06 — Kết quả chạy tuyến review Củ Chi" src="images/vietnam-review/02-result.png" /></p>
+<h3 id="43-so-voi-yeu-cau-thiet-ke-lai">4.3. So với yêu cầu thiết kế lại</h3>
+<p><strong>Đã có:</strong> hai layer, hai cửa, trục và nhánh hầm, kho/bệnh xá/bếp trên map, khóa di chuyển theo volume, mục tiêu lấy/giao cứu trợ, ưu tiên mục tiêu nhiệm vụ trước thao tác khác khi phù hợp.</p>
+<p><strong>Còn thiếu:</strong> hàng có item ID và số lượng độc lập; mang hàng giảm tốc; thả/nhặt lại không nhân bản; tổ giữ cửa và lệnh chỉ huy; tuần tra/perception mới; tuyến dự phòng; checkpoint bền vững; nhiệm vụ bảo vệ người/điểm trú.</p>
+<p><strong>Giới hạn đáng chú ý:</strong> code hiện có <code>if(layer==1) continue</code> trong vòng AI. Vì vậy AI mặt đất tạm dừng khi người chơi ở dưới hầm. Đây là phần <strong>chưa đạt yêu cầu surface vẫn tiếp diễn</strong>, cần sửa ở P2; ảnh dưới hầm không chứng minh AI mặt đất đang hoạt động.</p>
+<h3 id="44-gop-y-can-chot-cho-cu-chi">4.4. Góp ý cần chốt cho Củ Chi</h3>
+<ol>
+<li>Lối đi có quá tối/hẹp hoặc khó phân biệt với tường không?</li>
+<li>Nên có icon túi đang mang, số lượng và cảnh báo giao nhầm nơi thế nào?</li>
+<li>Bạn muốn thêm nguy cơ ở mặt đất, tình huống bảo vệ cửa hay quản lý vật tư dưới hầm trước?</li>
+<li>Khi cửa, hòm và bệnh xá gần nhau, E nên tự ưu tiên hay mở lựa chọn?</li>
+<li>Âm thanh, ánh sáng và bản đồ cần bổ sung gì để tạo cảm giác địa đạo?</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Mã góp ý</th>
+<th>Ảnh / bước</th>
+<th>Hiện tại thấy gì</th>
+<th>Muốn đổi thế nào</th>
+<th>P0/P1/P2/P3</th>
+<th>Tiêu chí chấp nhận</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CC-F01</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>CC-F02</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>CC-F03</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-man-3-tien-vao-dinh">5. Màn 3 — Tiến vào Dinh</h2>
+<h3 id="51-ho-so-va-vai-nhap">5.1. Hồ sơ và vai nhập</h3>
+<p><img alt="DINH-01 — Hồ sơ kíp xe" src="images/vietnam-review/03-briefing.png" /></p>
+<p>Catalog phân biệt xe 390 húc cổng chính và Bùi Quang Thận trên xe 843 kéo cờ. Người chơi điều khiển xe 390, AI đồng hành là xe 843. Tuyến đại lộ là mô phỏng. <strong>Màn hiện tại không yêu cầu bắn vào Dinh và không bố trí địch chỉ để tạo giao tranh ở sân Dinh.</strong></p>
+<h3 id="52-thong-so-xe-hien-tai">5.2. Thông số xe hiện tại</h3>
+<table>
+<thead>
+<tr>
+<th>Nhóm</th>
+<th>Giá trị profile</th>
+<th>Ý nghĩa khi review</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Độ bền</td>
+<td>1.200 HP; cấu hình tank địch 900 HP</td>
+<td>Không dùng việc không có địch trong màn này để kết luận tank đã cân bằng</td>
+</tr>
+<tr>
+<td>Chuyển động</td>
+<td>Tiến 45, lùi 25 unit/s; gia tốc 20, phanh 35 unit/s²</td>
+<td>Xe cần lấy đà và khoảng dừng</td>
+</tr>
+<tr>
+<td>Quay</td>
+<td>Thân 35°/s, tháp 50°/s</td>
+<td>W/S tiến lùi, A/D quay thân; chuột điều hướng tháp</td>
+</tr>
+<tr>
+<td>Pháo</td>
+<td>8 viên tổng ban đầu, sức chứa 12, nạp 6 s</td>
+<td>Viên đã nạp và dự trữ không đếm trùng</td>
+</tr>
+<tr>
+<td>Đường đạn</td>
+<td>Tầm 700, vận tốc 500 unit/s</td>
+<td>Có thời gian bay, không bám mục tiêu</td>
+</tr>
+<tr>
+<td>Nổ/giáp</td>
+<td>220 tâm nổ, bán kính 120; giáp trước/hông/sau 0,55/0,8/1,0</td>
+<td>Dùng để review combat ở Assault/tình huống thử riêng</td>
+</tr>
+<tr>
+<td>Ngắm</td>
+<td>Ổn định sau 1,5 s; tản khoảng ±3° khi động, ±0,6° khi ổn định</td>
+<td>Không hứa trúng tại con trỏ</td>
+</tr>
+<tr>
+<td>Nhiên liệu</td>
+<td>Quãng chuẩn khoảng 3.000 unit</td>
+<td>Tiêu theo quãng đường thực, không theo số input</td>
+</tr>
+<tr>
+<td>Sửa</td>
+<td>1 kit ban đầu, 8 s, +180 HP, trần 70% HP gốc</td>
+<td>Bị tấn công/ngắt thao tác không tự chữa đầy</td>
+</tr>
+</tbody>
+</table>
+<p>Tiếp tế trên map: hai hòm đạn, mỗi hòm 4 viên; một hòm nhiên liệu 750 đơn vị lượng tiếp liệu theo model; một hòm 1 kit sửa. Hòm còn dư giữ lại; không coi tiếp tế là điểm nâng cấp của Tank Assault.</p>
+<h3 id="53-cac-buoc-choi-hien-tai">5.3. Các bước chơi hiện tại</h3>
+<table>
+<thead>
+<tr>
+<th>Bước</th>
+<th>Hành động / mốc world unit</th>
+<th>Điều kiện qua bước</th>
+<th>Rủi ro cần xem</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Xuất phát</td>
+<td>Xe 390 gần (120,800), xe 843 gần phía sau</td>
+<td>Lái xe ra tuyến đường</td>
+<td>Có hiểu sơ đồ lái khác bộ binh?</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Hội quân gần (700,520)</td>
+<td>Vào vùng mục tiêu</td>
+<td>Chưa kiểm tra đầy đủ đội hình và bộ binh dẫn đường</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Tới (1330,520), E tương tác cổng</td>
+<td>Tương tác nhiệm vụ; trước đó không qua x≥1350</td>
+<td>Hiện là trigger tương tác, chưa có diễn hoạt va/húc cổng hoàn chỉnh</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Lái vào sân gần (1470,520)</td>
+<td>Vào vùng đích, kết thúc</td>
+<td>Chưa có hành trình hậu cần nhiều phân đoạn</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="DINH-02 — Xe 390, xe 843 và HUD tài nguyên" src="images/vietnam-review/03-start.png" /></p>
+<p><img alt="DINH-03 — Hội quân trên tuyến đại lộ" src="images/vietnam-review/03-rendezvous.png" /></p>
+<p><img alt="DINH-04 — Tiếp cận cổng, chưa tương tác" src="images/vietnam-review/03-gate.png" /></p>
+<p><img alt="DINH-05 — Sau tương tác mở đường vào sân" src="images/vietnam-review/03-open-gate.png" /></p>
+<p><img alt="DINH-06 — Kết quả chạy tuyến review Tiến vào Dinh" src="images/vietnam-review/03-result.png" /></p>
+<h3 id="54-so-voi-yeu-cau-thiet-ke-lai">5.4. So với yêu cầu thiết kế lại</h3>
+<p><strong>Đã có:</strong> xe nặng, thân/tháp độc lập, tài nguyên và tiếp tế hữu hạn, sửa xe, đồng hành 843, đại lộ, cổng và sân, ba mục tiêu, ranh giới trước tương tác cổng.</p>
+<p><strong>Còn thiếu:</strong> kiểm tra xe/loadout trước trận; phân đoạn trinh sát và đường bị chặn có lựa chọn; bộ binh dẫn đường; đội hình và điều kiện bảo toàn đoàn; tuyến vòng/rút được nghiệm thu; checkpoint xuyên phân đoạn; tổng kết quân số/vật tư; art/animation cổng và công trình ở chất lượng hoàn thiện.</p>
+<p><strong>Cần tách riêng:</strong> màn này phù hợp review cảm giác lái/hành trình; muốn đánh giá giáp, nổ, phục kích và hao đạn cần một tình huống chiến đấu Assault hoặc bài huấn luyện giả định riêng. Không thêm tank địch ở Dinh chỉ để đủ ảnh bắn nhau.</p>
+<h3 id="55-gop-y-can-chot-cho-tien-vao-dinh">5.5. Góp ý cần chốt cho Tiến vào Dinh</h3>
+<ol>
+<li>Xe hiện quá chậm hay đã đủ nặng; quay thân có khó điều khiển không?</li>
+<li>Có phân biệt được hướng thân xe với hướng nòng không?</li>
+<li>Hành trình cần thêm sửa chữa, tiếp liệu, chướng ngại hay đội hình trước?</li>
+<li>Cảnh cổng/sân nên diễn hoạt thế nào để rõ nhiệm vụ mà không thêm giao tranh sai bối cảnh?</li>
+<li>Cần nâng chất lượng xe, Dinh, đường hay camera trước?</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Mã góp ý</th>
+<th>Ảnh / bước</th>
+<th>Hiện tại thấy gì</th>
+<th>Muốn đổi thế nào</th>
+<th>P0/P1/P2/P3</th>
+<th>Tiêu chí chấp nhận</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DINH-F01</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>DINH-F02</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>DINH-F03</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-ho-so-du-kien-dan-quan-phong-khong">6. Hồ sơ dự kiến — Dân quân phòng không</h2>
+<p><strong>Trạng thái: P3, chưa có màn chơi, chưa có ảnh gameplay để capture.</strong> Không có enum/nút hoặc ảnh minh họa được coi là bằng chứng đã triển khai.</p>
+<p>Sơ đồ đề xuất để góp ý: <strong>nhận vật tư → cảnh giới/báo động → sơ tán → lên vị trí phòng không → bảo vệ qua 2–3 đợt hữu hạn → cứu trợ/tổng kết</strong>. Theo đặc tả, đề xuất bối cảnh Hà Nội tháng 12/1972; cần hồ sơ nguồn riêng trước khi chốt nhân vật, khí tài và tình huống cụ thể.</p>
+<table>
+<thead>
+<tr>
+<th>Nhóm yêu cầu</th>
+<th>Thiết kế cần giữ</th>
+<th>Hiện trạng</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vai dân quân</td>
+<td>Báo động, dẫn dân, tiếp đạn, E lên/xuống khí tài</td>
+<td>Chưa có</td>
+</tr>
+<tr>
+<td>Mục tiêu</td>
+<td>Bảo vệ/sơ tán; không chỉ tính số máy bay hạ</td>
+<td>Chưa có</td>
+</tr>
+<tr>
+<td>Layer/capability</td>
+<td>Mục tiêu bay thấp, vũ khí chỉ tác động độ cao cho phép</td>
+<td>Chưa có</td>
+</tr>
+<tr>
+<td>Đạn/heat</td>
+<td>Burst 3 viên, nghỉ khởi đầu 0,8 s, hữu hạn, quá nhiệt khóa tạm</td>
+<td>Chưa có</td>
+</tr>
+<tr>
+<td>Công bằng</td>
+<td>Cue cảnh giới trước tấn công; đạn có thời gian bay</td>
+<td>Chưa có</td>
+</tr>
+<tr>
+<td>Đồng thời</td>
+<td>Mặt đất vẫn chạy khi người chơi đang mounted</td>
+<td>Chưa có</td>
+</tr>
+<tr>
+<td>Bối cảnh</td>
+<td>Không làm gameplay súng trường bắn hạ B-52 tầm cao; không gán thành tích cho nhân vật hư cấu</td>
+<td>Ràng buộc nội dung cần giữ</td>
+</tr>
+<tr>
+<td>Dữ liệu</td>
+<td>Chapter ID mới, displayOrder riêng, migration không mất quyền màn cũ</td>
+<td>Chưa có</td>
+</tr>
+</tbody>
+</table>
+<p><strong>PK-F01:</strong> Bạn muốn ưu tiên cảm giác cảnh giới/sơ tán hay thao tác khẩu đội? <strong>PK-F02:</strong> Mục tiêu bảo vệ là bệnh xá, khu dân cư hay kho? <strong>PK-F03:</strong> Mức độ khó về tiếp đạn/heat thế nào? Các lựa chọn này còn cần thiết kế, không phải tính năng đã có.</p>
+<h2 id="7-oi-chieu-ay-u-cac-nhom-yeu-cau-truoc-o">7. Đối chiếu đầy đủ các nhóm yêu cầu trước đó</h2>
+<table>
+<thead>
+<tr>
+<th>Mã</th>
+<th>Nhóm yêu cầu / mục đặc tả gốc</th>
+<th>Đã có hoặc giới hạn hiện tại</th>
+<th>Phần phải làm / nghiệm thu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>REQ-01</td>
+<td>Vòng lặp trước/trong/sau trận (§3)</td>
+<td>Có hồ sơ, mục tiêu và màn kết quả cơ bản</td>
+<td>Loadout có tác dụng, mission graph, debrief chi tiết, hai tuyến và fallback</td>
+</tr>
+<tr>
+<td>REQ-02</td>
+<td>Xe nặng và profile/version (§4)</td>
+<td>Có profile dùng chung và version</td>
+<td>Playtest Standard trước; chưa có ba profile độ khó tactical hoàn chỉnh</td>
+</tr>
+<tr>
+<td>REQ-03</td>
+<td>Chamber/reload/inventory (§5.1)</td>
+<td>Có CannonState, đạn hữu hạn, ACK lệnh</td>
+<td>Chưa có save/restore checkpoint bền vững giữa loading</td>
+</tr>
+<tr>
+<td>REQ-04</td>
+<td>Ngắm/tháp/tản/RNG (§5.2)</td>
+<td>Có hướng nòng thực, ổn định ngắm, tản</td>
+<td>Checkpoint phải giữ RNG; cần nghiệm thu phản hồi bắn trượt</td>
+</tr>
+<tr>
+<td>REQ-05</td>
+<td>Swept collision/nổ/giáp (§5.3)</td>
+<td>Có mechanics, tự sát thương, vật che, phân loại obstacle</td>
+<td>Test/code không thay playtest hai phía tường; AP và phá địa hình chưa có</td>
+</tr>
+<tr>
+<td>REQ-06</td>
+<td>Tiếp tế/sửa/chữa (§5.4)</td>
+<td>Hòm hữu hạn, giữ dư, nhiên liệu, kit sửa</td>
+<td>Thuốc/cứu thương cá nhân, chia vật tư và carrying item còn thiếu</td>
+</tr>
+<tr>
+<td>REQ-07</td>
+<td>LOS, contact, fog (§6)</td>
+<td>Lọc snapshot; Assault có contact cũ 4 s</td>
+<td>Campaign chưa có perception memory/âm thanh/độ chắc chắn hoàn chỉnh</td>
+</tr>
+<tr>
+<td>REQ-08</td>
+<td>Commander/direct và đổi vai (§7)</td>
+<td>Có bộ binh/xe trực tiếp và AI đi theo</td>
+<td>Chưa có controlledActorId, đổi actor/command mode, kiểm tra actor quyền điều khiển</td>
+</tr>
+<tr>
+<td>REQ-09</td>
+<td>Squad orders và ACK (§7)</td>
+<td>ACK hiện cho thao tác input, chưa phải squad orders</td>
+<td>FOLLOW/HOLD/ADVANCE/AMBUSH/RETREAT, waypoint/path budget, từ chối có lý do</td>
+</tr>
+<tr>
+<td>REQ-10</td>
+<td>Suppression/downed/dead (§7.4)</td>
+<td>HP, AI có đạn hữu hạn trong campaign</td>
+<td>Cứu có thời hạn, ammo warning, minimumSurvivors, chính sách AI cứu/rút</td>
+</tr>
+<tr>
+<td>REQ-11</td>
+<td>Phòng không (§8)</td>
+<td>Chưa triển khai</td>
+<td>Aircraft layer, mount, heat, flight, cảnh giới, sơ tán, ưu tiên bảo vệ dân</td>
+</tr>
+<tr>
+<td>REQ-12</td>
+<td>Điện Biên mới (§9.1)</td>
+<td>Giữ cấu trúc ba mục tiêu cũ</td>
+<td>Giữ công sự 8 s, hai tuyến, trinh sát/lệnh tổ, hậu cần và quân số</td>
+</tr>
+<tr>
+<td>REQ-13</td>
+<td>Củ Chi mới (§9.2)</td>
+<td>Hầm hai lớp và chuỗi cứu trợ</td>
+<td>Surface AI không dừng, item ID, carry/drop/retrieve, bảo vệ cửa</td>
+</tr>
+<tr>
+<td>REQ-14</td>
+<td>Kíp xe/hành trình (§9.3)</td>
+<td>Xe 390/843 và ba mục tiêu</td>
+<td>Chướng ngại, tiếp tế/sửa có ý nghĩa, dẫn đường và bảo toàn đoàn</td>
+</tr>
+<tr>
+<td>REQ-15</td>
+<td>Save compatibility (§9.4)</td>
+<td>ID cũ 1/2/3, một số unlocked trong Redis</td>
+<td>Tập ID/version/prerequisite, migration idempotent, giữ entitlement</td>
+</tr>
+<tr>
+<td>REQ-16</td>
+<td>Bỏ blast preview (§10.1)</td>
+<td>Không gửi endpoint projectile, renderer vẽ nổ sau impact</td>
+<td>Tiếp tục kiểm tra payload/minimap/reconnect; vòng tầm không phải blast preview</td>
+</tr>
+<tr>
+<td>REQ-17</td>
+<td>HUD/điều khiển (§10.2–3)</td>
+<td>HP, đạn, reload, fuel, kit, objective; WASD/E/R/C/F</td>
+<td>Squad panel, Z bò, Tab chỉ huy, 1–5 orders, menu Esc, lý do từ chối rõ hơn</td>
+</tr>
+<tr>
+<td>REQ-18</td>
+<td>Mobile/audio/accessibility (§10.4)</td>
+<td>Có nút cảm ứng, nhãn văn bản, pulse tôn trọng reduced motion</td>
+<td>Ngắm cảm ứng cần kiểm chứng; audio pass, cue tương đương, nhiều vai chưa có</td>
+</tr>
+<tr>
+<td>REQ-19</td>
+<td>Server authoritative/contract (§11)</td>
+<td>Tick 100 ms, input ý định, sequence/ACK, private snapshot</td>
+<td>Chưa có toàn bộ ECS/system; không cần tạo class rỗng để đủ sơ đồ</td>
+</tr>
+<tr>
+<td>REQ-20</td>
+<td>Persistence/idempotency (§11.4)</td>
+<td>Reconnect giữ simulation RAM; unlock Redis</td>
+<td>Backend restart mất ván; checkpoint/receipt tài nguyên xuyên màn chưa có</td>
+</tr>
+<tr>
+<td>REQ-21</td>
+<td>Lịch sử/art (§12)</td>
+<td>Hồ sơ nguồn trong catalog, đồ họa 2D cách điệu</td>
+<td>Art/audio pass, hồ sơ riêng cho màn mới; chưa phục dựng tỷ lệ thật</td>
+</tr>
+<tr>
+<td>REQ-22</td>
+<td>P0–P4 (§13)</td>
+<td>Nền P0 đã có</td>
+<td>Đóng P0 sau playtest hai tuyến; P1 bộ binh/chỉ huy → P2 hành trình → P3 phòng không → P4 cân bằng</td>
+</tr>
+<tr>
+<td>REQ-23</td>
+<td>Ma trận test (§14)</td>
+<td>Repo có test luật, tactical, campaign và security</td>
+<td>W01–12/A01–08/M01–11/C01–03/F01–06 cần gắn bằng chứng; không mặc định tất cả đã qua</td>
+</tr>
+<tr>
+<td>REQ-24</td>
+<td>Playtest thực (§14.5)</td>
+<td>Có phiên chụp bằng thao tác UI tự động trong đợt review</td>
+<td>Chưa có nghiệm thu người chơi trên desktop/mobile từng vai, chưa kết luận nhịp độ đạt</td>
+</tr>
+</tbody>
+</table>
+<h3 id="nhung-gioi-han-khong-uoc-bo-qua-khi-gop-y">Những giới hạn không được bỏ qua khi góp ý</h3>
+<ol>
+<li>Reconnect trong cùng backend giữ state; restart backend không khôi phục trận. Chơi lại là lượt mới, khác reconnect.</li>
+<li>Đổi vai, squad commands và phòng không chưa có; không mô tả nút tương lai là đang dùng được.</li>
+<li>Ba màn vẫn dùng mục tiêu cũ; P0 chủ yếu đổi nền cơ chế chứ chưa thay toàn bộ hành trình.</li>
+<li>Classic/Assault/campaign có ranh giới luật khác nhau. AI bộ binh Assault vẫn theo cadence/wave cũ; không suy ra inventory hữu hạn campaign đã áp cho mọi đối tượng Assault.</li>
+<li>Tài liệu gốc báo kết quả test của đợt 19/10; không dùng số đó làm kết quả chạy lại ngày 20/10. Ảnh review là bằng chứng UI tại thời điểm chụp, không thay toàn bộ suite.</li>
+</ol>
+<h2 id="8-review-ieu-khien-va-man-hinh-nho">8. Review điều khiển và màn hình nhỏ</h2>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Đang có trong campaign</th>
+<th>Cần lưu ý</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WASD / mũi tên</td>
+<td>Bộ binh đi; xe W/S tiến lùi, A/D quay thân</td>
+<td>Xe không chạy ngang như bộ binh</td>
+</tr>
+<tr>
+<td>Chuột / giữ chuột trái / Space</td>
+<td>Ngắm / yêu cầu bắn</td>
+<td>Server quyết định thời điểm và hướng nòng thực</td>
+</tr>
+<tr>
+<td>E</td>
+<td>Mục tiêu, hòm tiếp tế, cửa hầm</td>
+<td>Cần phản hồi nếu ngoài tầm hoặc đủ đồ</td>
+</tr>
+<tr>
+<td>R</td>
+<td>Nạp băng bộ binh</td>
+<td>Pháo tự nạp; R không sinh thêm đạn</td>
+</tr>
+<tr>
+<td>C</td>
+<td>Giữ để khom bộ binh</td>
+<td>Không thay thế suppression/crawl</td>
+</tr>
+<tr>
+<td>F</td>
+<td>Sửa xe nếu đủ điều kiện</td>
+<td>Không phải chức năng cứu thương hoàn chỉnh</td>
+</tr>
+<tr>
+<td>Tab / 1–5 / Z</td>
+<td>Chưa có chức năng như đặc tả</td>
+<td>Không hướng dẫn người chơi dùng như tính năng đã xong</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="MOB-01 — Giao diện màn 3 ở viewport mobile" src="images/vietnam-review/03-mobile.png" /></p>
+<p><strong>MOB-01:</strong> ảnh kiểm tra bố cục màn hình nhỏ, không tương đương nghiệm thu thao tác cảm ứng trên thiết bị thật. Góp ý kích thước nút, phần chiến trường còn nhìn được, số ngón tay cần dùng để lái/ngắm/bắn và việc nút có che mục tiêu không.</p>
+<h2 id="9-phieu-nghiem-thu-e-i-tu-gop-y-sang-viec-can-lam">9. Phiếu nghiệm thu để đi từ góp ý sang việc cần làm</h2>
+<h3 id="ghi-nhan-truc-tiep-tu-anh-va-code-hien-tai">Ghi nhận trực tiếp từ ảnh và code hiện tại</h3>
+<table>
+<thead>
+<tr>
+<th>Mã</th>
+<th>Bằng chứng</th>
+<th>Góp ý có thể đưa vào backlog</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBS-01</td>
+<td>DB-04: nhãn An/Bình/BẠN bị chồng khi đứng gần</td>
+<td>Tách nhãn theo khoảng cách hoặc chỉ hiện tên khi chọn/hover</td>
+</tr>
+<tr>
+<td>OBS-02</td>
+<td>DB-05: sau hoàn thành vẫn thấy bộ đếm nhiệm vụ 4/3 phía sau overlay</td>
+<td>Hiển thị Đã hoàn thành hoặc giới hạn chỉ số mục tiêu cuối</td>
+</tr>
+<tr>
+<td>OBS-03</td>
+<td>Code Củ Chi dừng AI khi layer=1</td>
+<td>Surface cần tiếp tục chạy, không tạo miễn nguy hiểm cho tổ ở trên</td>
+</tr>
+<tr>
+<td>OBS-04</td>
+<td>Trình tự E tại cổng Dinh hiện điều khiển bước nhiệm vụ</td>
+<td>Cần thống nhất animation tiếp cận/húc cổng và phản hồi trước khi qua</td>
+</tr>
+</tbody>
+</table>
+<p>Các mục này là phát hiện để bạn review; đợt tài liệu chưa sửa gameplay hoặc UI.</p>
+<p>Mỗi góp ý nên ghi theo mẫu: <strong>“DINH-04 / REQ-14: trước cổng thiếu cảm giác đoàn xe; muốn xe 843 chờ đúng đội hình; đạt khi vào vùng hội quân chỉ hoàn thành nếu cả hai xe còn sống và cùng ở trong vùng.”</strong> Đây là ví dụ đề xuất, chưa phải yêu cầu đã triển khai.</p>
+<table>
+<thead>
+<tr>
+<th>Lượt</th>
+<th>Build/profile</th>
+<th>Màn/vai</th>
+<th>Desktop/mobile</th>
+<th>Tuyến</th>
+<th>Thời gian</th>
+<th>Reload</th>
+<th>Đạn/fuel còn</th>
+<th>Đồng đội sống</th>
+<th>Lý do retry</th>
+<th>Kết luận</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PT-01</td>
+<td></td>
+<td>Điện Biên/bộ binh</td>
+<td></td>
+<td>Hào</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>PT-02</td>
+<td></td>
+<td>Điện Biên/bộ binh</td>
+<td></td>
+<td>Tuyến thứ hai cần chốt</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>PT-03</td>
+<td></td>
+<td>Củ Chi/giao liên</td>
+<td></td>
+<td>A → kho → bệnh xá → B</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>PT-04</td>
+<td></td>
+<td>Tiến vào Dinh/kíp xe</td>
+<td></td>
+<td>Đại lộ</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>PT-05</td>
+<td></td>
+<td>Assault/tank</td>
+<td></td>
+<td>Cover/tiếp tế, cần bố trí cố định</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Ưu tiên xử lý: <strong>P0</strong> lỗi chặn chơi/mất tài nguyên/lộ thông tin; <strong>P1</strong> luật và vai trò cốt lõi; <strong>P2</strong> hành trình/UI/art; <strong>P3</strong> mở màn phòng không. Đây là phân loại góp ý để sắp công việc, không tự thay định nghĩa phase trong đặc tả gốc.</p>
+<h3 id="kiem-tra-truoc-khi-chot-p0">Kiểm tra trước khi chốt P0</h3>
+<ul>
+<li>[ ] Hai tuyến hoàn thành có số liệu thời gian/đạn/fuel/tổn thất, cùng một tuyến rút/tiếp tế hữu ích.</li>
+<li>[ ] Giữ fire không bỏ qua 6 giây nạp; hết đạn không tự sinh; loaded/reserve hiển thị dễ hiểu.</li>
+<li>[ ] Chết khi nạp, reconnect, hết fuel và chơi lại có hành vi đúng, không lẫn lượt cũ/mới.</li>
+<li>[ ] Địch sau vật che và endpoint đạn không lộ trong payload/minimap.</li>
+<li>[ ] Cover tạo khác biệt đo được; không chỉ cộng HP để giả độ khó.</li>
+<li>[ ] Desktop và mobile có người chơi thật đánh giá, ghi lý do không bắn/tương tác được.</li>
+<li>[ ] Tách rõ phần lịch sử có nguồn và tuyến/nhiệm vụ sáng tác.</li>
+</ul>
+<h2 id="10-nguon-code-va-cach-chup-lai">10. Nguồn code và cách chụp lại</h2>
+<table>
+<thead>
+<tr>
+<th>Nội dung</th>
+<th>Nguồn trong repo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hồ sơ / vai / nguồn bối cảnh</td>
+<td><code>src/main/java/com/brim/game/game/vietnam/VietnamCampaign.java</code></td>
+</tr>
+<tr>
+<td>Map / mục tiêu / layer / AI / tương tác</td>
+<td><code>src/main/java/com/brim/game/game/vietnam/VietnamGame.java</code></td>
+</tr>
+<tr>
+<td>Xe nặng / pháo / giáp / geometry</td>
+<td><code>src/main/java/com/brim/game/game/tactical/</code></td>
+</tr>
+<tr>
+<td>Thông số</td>
+<td><code>src/main/resources/games/tactical-standard.json</code></td>
+</tr>
+<tr>
+<td>Giao diện hồ sơ / trận</td>
+<td><code>frontend/src/views/VietnamHubView.vue</code>, <code>VietnamGameView.vue</code></td>
+</tr>
+<tr>
+<td>Đồ họa và minimap</td>
+<td><code>frontend/src/game/vietnam/render.ts</code></td>
+</tr>
+<tr>
+<td>Quyền SEND/SUBSCRIBE</td>
+<td><code>src/main/java/com/brim/game/security/GameMessageGuard.java</code></td>
+</tr>
+<tr>
+<td>Test route / tactical</td>
+<td><code>src/test/java/com/brim/game/game/VietnamGameTest.java</code>, <code>TacticalMechanicsTest.java</code>, <code>TankAssaultTest.java</code></td>
+</tr>
+</tbody>
+</table>
+<p>Ảnh được chụp bằng <code>scripts/capture-vietnam-review.mjs</code>, dùng Chrome DevTools Protocol. <code>scripts/vietnam-review-controls.js</code> gửi phím vào handler UI; các file <code>scripts/vietnam-review-route-*.json</code> mô tả tuyến, không teleport hay sửa HP/đạn/mục tiêu. Cần backend :8080, Vite :3000 và Chrome profile riêng có CDP :9224. Chỉ dùng script trên môi trường review local; script không có cơ chế tự mở khóa và không nên chạy lại nguyên trạng trong phiên cá nhân đang chơi.</p>
+<p>Lệnh mẫu sau khi chuẩn bị Chrome/profile review và quyền màn thích hợp:</p>
+<pre><code class="language-bash">node --experimental-websocket scripts/capture-vietnam-review.mjs init
+node --experimental-websocket scripts/capture-vietnam-review.mjs hub
+node --experimental-websocket scripts/capture-vietnam-review.mjs start 1
+node --experimental-websocket scripts/capture-vietnam-review.mjs route scripts/vietnam-review-route-1.json
+</code></pre>
+<p>Bản HTML/PDF là bản xuất từ Markdown này. Khi sửa nội dung, chạy <code>python3 scripts/export-vietnam-review.py</code>, sau đó dùng chế độ <code>pdf</code> của script capture để xuất PDF qua Chrome.</p>
+<h2 id="11-gop-y-moi-va-ban-thiet-ke-thay-the">11. Góp ý mới và bản thiết kế thay thế</h2>
+<p><strong>Trạng thái:</strong> đã cập nhật yêu cầu tài liệu, chưa triển khai các cơ chế/camera/asset mới. Không có ảnh capture của tính năng chưa tồn tại. 22 ảnh cũ được giữ nguyên để bạn chỉ đúng vấn đề theo mã DB/CC/DINH/MOB.</p>
+<h3 id="111-thay-oi-can-thay-o-tung-man">11.1. Thay đổi cần thấy ở từng màn</h3>
+<table>
+<thead>
+<tr>
+<th>Màn / ảnh baseline</th>
+<th>Thiết kế mới phải thể hiện</th>
+<th>Bằng chứng cần chụp ở vòng sau</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Điện Biên, DB-02–07</td>
+<td>Hành trình 20–35 phút, nhiều encounter, 1–2 người theo và tổ giữ chốt xa, thoại nhận lệnh, băng bó/loot, hai tuyến/giữ vùng</td>
+<td>Camera chéo, silhouette mới, trận đông hơn, bleeding/băng, đối thoại, tập kết đủ quân</td>
+</tr>
+<tr>
+<td>Củ Chi, CC-02–07</td>
+<td>Hầm hẹp hơn, nhiều nhánh/ngách/cửa, khom/bò, thoại chỉ đường, mang hàng, surface không freeze</td>
+<td>Trần thấp, ánh/âm ngột ngạt, sơ đồ nhánh, hàng có ID, nhóm giữ cửa</td>
+</tr>
+<tr>
+<td>Tiến vào Dinh, DINH-02–06</td>
+<td>Nhiều chặng kiểm tra/tiếp liệu/sửa/đội hình/chướng ngại; thoại và diễn hoạt cổng</td>
+<td>Đoàn xe xa/gần, hậu cần và route, cảnh cổng đúng vai; không thêm địch sân Dinh</td>
+</tr>
+<tr>
+<td>Lượm, chưa có ảnh</td>
+<td>Màn giao thư riêng, cảm hứng văn học, hỏi đường/né chốt/Shift/nhà trú</td>
+<td>Nhân vật và tuyến riêng, thư/người nhận/nhật ký; không gán tiểu sử chưa xác minh</td>
+</tr>
+<tr>
+<td>Nhà dân, chưa có ảnh</td>
+<td>Nội thất, cửa trước/sau, tuần tra điều tra/đồ gây chú ý, người dân có thoại</td>
+<td>Cắt mái/occlusion, ẩn náu không reset alert, thoát theo thời cơ</td>
+</tr>
+<tr>
+<td>Rừng, chưa có ảnh</td>
+<td>Bẫy game trừu tượng, phục kích, lựu đạn, lực lượng hữu hạn/đường rút</td>
+<td>Tán nhiều lớp, vị trí tổ/địch cover, trạng thái trap và lệnh chờ</td>
+</tr>
+<tr>
+<td>Phòng không, chưa có ảnh</td>
+<td>Di chuyển ngôi ba → lên khí tài ngắm FPS; mục tiêu bay thấp nhanh/lượn; bom phá mục tiêu thì fail</td>
+<td>Hai camera giữ cùng state, pass/cảnh giới/bom, cao trào nhiều lực lượng/B-52 đúng vai</td>
+</tr>
+<tr>
+<td>Chỉ huy, chưa có ảnh</td>
+<td>Mini dẫn 2–3 tổ đánh chiếm, HOLD/AMBUSH/RETREAT, fog, đạn và quân số</td>
+<td>Bản đồ tình báo, ACK/reason, bố trí/yểm trợ/chiếm giữ</td>
+</tr>
+<tr>
+<td>Trường Sơn, chưa có ảnh</td>
+<td>VN-09 riêng: lái xe không kính chở lương thực, đoàn xe, dừng/sửa/tiếp liệu, biến cố đường và giao nhận</td>
+<td>Cabin không kính, hàng/manifest, camera lái, xe bạn/đơn vị giữ tuyến, giao hàng và debrief lịch sử</td>
+</tr>
+</tbody>
+</table>
+<h3 id="112-nhung-thay-oi-xuyen-suot">11.2. Những thay đổi xuyên suốt</h3>
+<p>Bỏ đường nối nhân vật–chuột và preview đường ném/tâm nổ; bắn theo hướng nhân vật/nòng thực, đạn thử nhanh hơn. Map chia chunk, preload vùng gần và cull theo camera; server vẫn mô phỏng sự kiện ngoài hình, lọc snapshot theo AOI/LOS. Art tối hơn theo bối cảnh nhưng không khó đọc. Asset cần source/license/scale/LOD, chưa tải pack trong đợt này.</p>
+<p>Bleeding phải cầm bằng băng gạc, khác medkit hồi HP; vật tư/đạn từ địch và thùng có ID và số lượng hữu hạn, không farm qua reconnect. Hội thoại chứa chỉ dẫn thật và lưu nhật ký/fallback; cuối chiến dịch có thẻ lịch sử và lời trích có nguồn, chưa xác minh thì ghi tóm lược thay vì gán danh nhân.</p>
+<p>Cao trào B-52 giữ ý tưởng nhiều đơn vị hiệp đồng, phân biệt vai tên lửa với mục tiêu bay thấp của dân quân; không dùng súng trường hoặc minigame bắn vịt để mô tả hạ B-52 tầm cao. Xem nguồn và phương án vai người chơi ở §13 của spec v2.</p>
+<h3 id="113-truy-vet-tung-gop-y">11.3. Truy vết từng góp ý</h3>
+<table>
+<thead>
+<tr>
+<th>Mã</th>
+<th>Góp ý</th>
+<th>Nghiệm thu / mục spec</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FB-01</td>
+<td>Địch ít</td>
+<td>Nhiều encounter/tổ, mật độ/budget/tiếp viện hữu hạn (§3/6)</td>
+</tr>
+<tr>
+<td>FB-02</td>
+<td>Trải nghiệm ngắn</td>
+<td>Đạt thời lượng có quyết định, trừ AFK/chờ giả (§3/10)</td>
+</tr>
+<tr>
+<td>FB-03</td>
+<td>Map nhỏ</td>
+<td>Nhiều khu, hai tuyến và đường rút; không đất trống (§3/8)</td>
+</tr>
+<tr>
+<td>FB-04</td>
+<td>Nhân vật ngộ nghĩnh/khó nhìn</td>
+<td>Tỷ lệ/pose/animation mới, duyệt zoom chuẩn/mobile (§4/9)</td>
+</tr>
+<tr>
+<td>FB-05</td>
+<td>Bleeding</td>
+<td>Trúng đòn tạo state/FX, HP server, không reset (§5)</td>
+</tr>
+<tr>
+<td>FB-06</td>
+<td>Băng gạc/hồi máu</td>
+<td>Cầm máu khác hồi HP, consume/reserve đúng (§5)</td>
+</tr>
+<tr>
+<td>FB-07</td>
+<td>Đồ rớt địch/map</td>
+<td>Container ID, loot/kho hữu hạn, không reroll (§5)</td>
+</tr>
+<tr>
+<td>FB-08</td>
+<td>1–2 đi theo, quân khác xa</td>
+<td>Hai loại nhóm có vai/vùng/state (§6.3)</td>
+</tr>
+<tr>
+<td>FB-09</td>
+<td>Hội thoại nhân vật</td>
+<td>Named speaker, phản ứng trạng thái, nhật ký (§7)</td>
+</tr>
+<tr>
+<td>FB-10</td>
+<td>Thoại để biết vượt màn</td>
+<td>Suy ra tuyến/NPC/thời điểm, fallback (§7)</td>
+</tr>
+<tr>
+<td>FB-11</td>
+<td>Map sáng/thiếu thời chiến</td>
+<td>Palette/props/audio theo bối cảnh vẫn dễ đọc (§9)</td>
+</tr>
+<tr>
+<td>FB-12</td>
+<td>Asset tả thực</td>
+<td>Backlog, manifest/license/scale/LOD, chưa tải (§9)</td>
+</tr>
+<tr>
+<td>FB-13</td>
+<td>Đi tới đâu render tới đó</td>
+<td>Chunk/culling/AOI, RAM ổn, không lộ địch (§8)</td>
+</tr>
+<tr>
+<td>FB-14</td>
+<td>Đạn chậm</td>
+<td>Vận tốc thử mới và swept collision (§4.2)</td>
+</tr>
+<tr>
+<td>FB-15</td>
+<td>Ta/địch ẩn nấp</td>
+<td>Cover/LOS hai phía, không nhìn xuyên (§6)</td>
+</tr>
+<tr>
+<td>FB-16</td>
+<td>Hành trình thực tế</td>
+<td>Thương tích/vật tư/thông tin xuyên phân đoạn (§3/16)</td>
+</tr>
+<tr>
+<td>FB-17</td>
+<td>Đạn hạn chế, lấy địch/thùng</td>
+<td>Budget bắt buộc, kho/loot/fallback (§5)</td>
+</tr>
+<tr>
+<td>FB-18</td>
+<td>Phòng không ngôi ba/ngôi nhất</td>
+<td>Switch mount đúng chỗ, không reset/pause (§13.1)</td>
+</tr>
+<tr>
+<td>FB-19</td>
+<td>Bay nhanh/lượn/bắn vịt</td>
+<td>Nhiều pass, aim có thời gian bay, không auto-hit (§13.2)</td>
+</tr>
+<tr>
+<td>FB-20</td>
+<td>Bom trúng thì fail</td>
+<td>Mục tiêu bắt buộc, policy rõ, fail trước reward (§13.3)</td>
+</tr>
+<tr>
+<td>FB-21</td>
+<td>Đồng đội/B-52 cao trào</td>
+<td>Hiệp đồng và vai tên lửa phù hợp (§13.4)</td>
+</tr>
+<tr>
+<td>FB-22</td>
+<td>Thêm lịch sử</td>
+<td>Nguồn/niên biểu/khí tài, không gán bừa (§10/15)</td>
+</tr>
+<tr>
+<td>FB-23</td>
+<td>Giữ Shift chạy</td>
+<td>Stamina/tốc độ/tiếng động server/mobile (§4.3)</td>
+</tr>
+<tr>
+<td>FB-24</td>
+<td>Góc quay chéo</td>
+<td>Thấy chiều sâu, không overhead cũ (§4.1)</td>
+</tr>
+<tr>
+<td>FB-25</td>
+<td>Lựu đạn/ẩn nấp</td>
+<td>Action/cover/impact, không preview (§6.2)</td>
+</tr>
+<tr>
+<td>FB-26</td>
+<td>Một địch kéo nhiều địch</td>
+<td>Alert có độ trễ/phạm vi/vị trí cuối (§6.1)</td>
+</tr>
+<tr>
+<td>FB-27</td>
+<td>Vào nhà dân</td>
+<td>Nội thất/cửa sau, không reset truy đuổi (§12.2)</td>
+</tr>
+<tr>
+<td>FB-28</td>
+<td>Hóa thân Lượm</td>
+<td>Màn giao thư riêng, chuyển thể ghi rõ (§12.1)</td>
+</tr>
+<tr>
+<td>FB-29</td>
+<td>Đồ vật gây chú ý</td>
+<td>Sound event/AI investigation/layer, không spam (§6.1)</td>
+</tr>
+<tr>
+<td>FB-30</td>
+<td>Bẫy rừng/phục kích</td>
+<td>Màn riêng, item/state/trigger/checkpoint (§6.2/10)</td>
+</tr>
+<tr>
+<td>FB-31</td>
+<td>Ý tưởng là màn riêng</td>
+<td>9 design ID, briefing/mission/debrief riêng (§10)</td>
+</tr>
+<tr>
+<td>FB-32</td>
+<td>Không kẻ đường tới chuột</td>
+<td>Không aim line rifle/grenade/FPS/map (§4.2)</td>
+</tr>
+<tr>
+<td>FB-33</td>
+<td>Lịch sử sau chiến dịch</td>
+<td>Trích đúng hoặc tóm lược, nguồn/đọc lại (§15)</td>
+</tr>
+<tr>
+<td>FB-34</td>
+<td>Chỉ huy bày binh/chiếm</td>
+<td>Tổ/lệnh ACK/fog/giữ quân (§14)</td>
+</tr>
+<tr>
+<td>FB-35</td>
+<td>Hầm chật/phức tạp/nhiều đường</td>
+<td>Nhánh/tư thế/lối thoát/ánh âm, không kẹt (§11.2)</td>
+</tr>
+<tr>
+<td>FB-36</td>
+<td>Xe không kính dọc Trường Sơn, lái chở lương thực</td>
+<td>Màn vận tải VN-09 riêng: đoàn xe/đường khó/thoại, bảo toàn xe-người-hàng, giao nhận có receipt (§20)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="114-phieu-gop-y-cho-v2">11.4. Phiếu góp ý cho v2</h3>
+<table>
+<thead>
+<tr>
+<th>Mã phản hồi</th>
+<th>FB / màn / ảnh</th>
+<th>Điều muốn thay</th>
+<th>Mức ưu tiên</th>
+<th>Điều kiện bạn chấp nhận</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>V2-F01</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>V2-F02</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>V2-F03</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Bước review tiếp: R0 prototype camera/nhân vật/ánh sáng/streaming; R1 sinh tồn và giao tranh; R2 một hành trình đủ dài; rồi mới nhân ra màn riêng. Đây là thứ tự mới, không dùng phase P1/P2/P3 ở ảnh baseline làm cam kết triển khai hiện tại.</p>
+<h3 id="115-bo-sung-xe-khong-kinh-doc-truong-son-fb-36">11.5. Bổ sung — Xe không kính dọc Trường Sơn (FB-36)</h3>
+<p><strong>Màn vận tải riêng VN-09, chưa triển khai/chưa có ảnh capture.</strong> Xem §20 trong <a href="VIETNAM_CAMPAIGN.md">đặc tả</a> hoặc <a href="VIETNAM_CAMPAIGN.pdf">PDF</a>.</p>
+<p>Người chơi lái xe tải không kính chở lương thực: nhận/kiểm hàng → chuẩn bị xe → theo đoàn vào rừng/dốc → vượt đoạn đường khó → nghỉ/sửa/tiếp nhiên liệu và nghe hội thoại → xử lý đường bị chặn/xe bạn gặp sự cố → chặng cuối → xuống xe bàn giao đúng NPC. Mục tiêu thử 25–40 phút, hai tuyến và checkpoint an toàn; không chỉ chạy xe tới một điểm vàng.</p>
+<p>Trọng tâm là bảo toàn người-xe-hàng, hậu cần và tình đồng đội. Có người đi cùng, xe dẫn/xe bạn và lực lượng giữ tuyến ở xa. Xe có tải/quán tính/hư hại/nhiên liệu, hàng có ID/số lượng/tình trạng; có thể chuyển sang xe còn chỗ nếu mission cho phép. Không gắn pháo hoặc biến xe tải thành tank bằng đổi skin. Bom/sự cố có cảnh báo/phương án, thiếu hàng tối thiểu phải giải thích rõ và có retry phù hợp.</p>
+<p>Ảnh cần chụp sau triển khai: cabin không kính và camera lái chéo; xuất bến với hàng; đoàn xe trên đường rừng; điểm nghỉ với hội thoại; biến cố và chuyển hàng; HUD hàng/nhiên liệu/hư hại; bàn giao và thẻ lịch sử. Không dùng ảnh xe tăng hiện có để minh họa như thể màn này đã xong.</p>
+<p>Hồ sơ nguồn: <a href="https://baotanglichsu.vn/VI/Articles/3096/18043/djuong-truong-son-con-djuong-noi-hau-phuong-va-tien-tuyen.html">Bảo tàng Lịch sử quốc gia — Đường Trường Sơn</a>, <a href="https://www.qdnd.vn/van-hoa/doi-song/bai-tho-ve-tieu-doi-xe-khong-kinh-410246">Báo Quân đội nhân dân — Bài thơ về tiểu đội xe không kính</a>. Tuyến/thoại/sự cố game sáng tác, chưa gán chuyến đi/đơn vị cụ thể.</p></main></body></html>

@@ -1,0 +1,11 @@
+[
+  {"move":[120,390]},
+  {"move":[400,390],"shot":"01-trench"},
+  {"move":[680,390],"shot":"01-contact"},
+  {"fight":35,"shot":"01-combat"},
+  {"move":[680,210]},
+  {"move":[780,210],"action":"INTERACT","shot":"01-bunker"},
+  {"move":[780,130]},
+  {"move":[1430,130]},
+  {"move":[1430,160],"shot":"01-result"}
+]
