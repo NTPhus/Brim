@@ -1,0 +1,80 @@
+[
+  {
+    "id": "DINH_BO_LINH",
+    "name": "Đinh Bộ Lĩnh",
+    "title": "Thống lĩnh",
+    "description": "Cân bằng công thủ, phù hợp để làm quen thế trận.",
+    "color": "#bf9652",
+    "emblem": "banner",
+    "hpBonus": 0,
+    "attackBonus": 0,
+    "skillBonus": 0,
+    "startingEnergy": 10,
+    "startingShield": 0
+  },
+  {
+    "id": "DINH_LIEN",
+    "name": "Đinh Liễn",
+    "title": "Tiên phong",
+    "description": "Đánh mạnh bằng kiếm, đổi lại ít máu hơn.",
+    "color": "#c56550",
+    "emblem": "sword",
+    "hpBonus": -12,
+    "attackBonus": 1,
+    "skillBonus": 0,
+    "startingEnergy": 10,
+    "startingShield": 0
+  },
+  {
+    "id": "NGUYEN_BAC",
+    "name": "Nguyễn Bặc",
+    "title": "Thiết vệ",
+    "description": "Nhiều máu và khiên khởi đầu, sức công thấp hơn.",
+    "color": "#699c83",
+    "emblem": "shield",
+    "hpBonus": 24,
+    "attackBonus": -1,
+    "skillBonus": 0,
+    "startingEnergy": 10,
+    "startingShield": 12
+  },
+  {
+    "id": "DINH_DIEN",
+    "name": "Đinh Điền",
+    "title": "Quân sư",
+    "description": "Binh pháp mạnh hơn, cần giữ gìn lượng máu.",
+    "color": "#9d86c5",
+    "emblem": "scroll",
+    "hpBonus": -8,
+    "attackBonus": 0,
+    "skillBonus": 1,
+    "startingEnergy": 10,
+    "startingShield": 0
+  },
+  {
+    "id": "LE_HOAN",
+    "name": "Lê Hoàn",
+    "title": "Kỵ tướng",
+    "description": "Khởi đầu với 25 năng lượng để sớm chủ động dùng kỹ năng.",
+    "color": "#619db8",
+    "emblem": "spear",
+    "hpBonus": 0,
+    "attackBonus": 0,
+    "skillBonus": 0,
+    "startingEnergy": 25,
+    "startingShield": 0
+  },
+  {
+    "id": "DUONG_VAN_NGA",
+    "name": "Dương Vân Nga",
+    "title": "Hộ quân",
+    "description": "Thêm máu và khiên để giữ vững đội hình.",
+    "color": "#c78ca9",
+    "emblem": "lotus",
+    "hpBonus": 12,
+    "attackBonus": 0,
+    "skillBonus": 0,
+    "startingEnergy": 10,
+    "startingShield": 16
+  }
+]

@@ -6,17 +6,16 @@ import java.util.*;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-/** Per-player updates are serialized in this single-backend platform. No client reward endpoint. */
+/** Database row locks serialize upgrades and idempotent rewards; Redis is a one-time legacy import. */
 @Service
 public class WarlordsProfileService implements WarlordsProfile.Store {
     private final RedisTemplate<String,Object> redis;
-    private final Object[] locks=new Object[64];
-    public WarlordsProfileService(RedisTemplate<String,Object> redis) {
-        this.redis=redis;Arrays.setAll(locks,i->new Object());
+    private final WarlordsDatabase database;
+    public WarlordsProfileService(RedisTemplate<String,Object> redis,WarlordsDatabase database) {
+        this.redis=redis;this.database=database;
     }
-    private Object lock(String id) {return locks[Math.floorMod(id.hashCode(),locks.length)];}
     private String key(String id) {return "profile:warlords:"+id;}
-    private Map<String,Object> read(String id) {
+    private Map<String,Object> legacy(String id) {
         Object value=redis.opsForValue().get(key(id));
         Map<String,Object> result=new HashMap<>();
         if(value instanceof Map<?,?> map) map.forEach((k,v)->{if(k instanceof String s)result.put(s,v);});
@@ -32,24 +31,31 @@ public class WarlordsProfileService implements WarlordsProfile.Store {
         int unlocked=1;while(unlocked<12&&cleared.contains(unlocked))unlocked++;
         return new WarlordsProfile(number(data,"gold",100,1_000_000),number(data,"experience",0,1_000_000),
                 number(data,"weapon",0,5),number(data,"armor",0,5),number(data,"skill",0,5),unlocked,
-                new ArrayList<>(cleared),number(data,"wins",0,1_000_000),number(data,"losses",0,1_000_000));
+                new ArrayList<>(cleared),number(data,"wins",0,1_000_000),number(data,"losses",0,1_000_000),
+                data.get("heroId") instanceof String id ? id : null);
     }
-    @Override public WarlordsProfile load(String id) {synchronized(lock(id)){return profile(read(id));}}
+    private <T> T update(String id,java.util.function.Function<Map<String,Object>,T> change) {
+        return database.update(key(id),()->legacy(id),change);
+    }
+    @Override public WarlordsProfile load(String id) {return update(id,this::profile);}
+    @Override public WarlordsProfile selectHero(String id,String heroId) {
+        String selected=com.brim.game.game.warlords.WarlordsHeroes.require(heroId).id();
+        return update(id,data->{data.put("heroId",selected);return profile(data);});
+    }
     @Override public WarlordsProfile upgrade(String id,String type) {
-        synchronized(lock(id)) {
-            Map<String,Object> data=read(id);WarlordsProfile current=profile(data);
+        return update(id,data->{
+            WarlordsProfile current=profile(data);
             String field=switch(type==null?"":type){case "WEAPON"->"weapon";case "ARMOR"->"armor";case "SKILL"->"skill";default->throw new IllegalArgumentException("Loại nâng cấp không hợp lệ.");};
             int rank=number(data,field,0,5),cost=WarlordsProfile.upgradeCost(type,rank);
             if(rank>=5)throw new IllegalArgumentException("Nâng cấp đã đạt cấp tối đa.");
             if(current.gold()<cost)throw new IllegalArgumentException("Không đủ vàng để nâng cấp.");
             data.put(field,rank+1);data.put("gold",current.gold()-cost);
-            redis.opsForValue().set(key(id),data);
             return profile(data);
-        }
+        });
     }
     @Override public WarlordsProfile claim(String id,Claim claim) {
-        synchronized(lock(id)) {
-            Map<String,Object> data=read(id);WarlordsProfile current=profile(data);
+        return update(id,data->{
+            WarlordsProfile current=profile(data);
             Map<String,Long> receipts=new HashMap<>();
             if(data.get("receipts") instanceof Map<?,?> map)map.forEach((k,v)->{if(k instanceof String s&&v instanceof Number n)receipts.put(s,n.longValue());});
             long retired=data.get("retiredBefore") instanceof Number n?n.longValue():0;
@@ -69,8 +75,7 @@ public class WarlordsProfileService implements WarlordsProfile.Store {
                 retired=Math.max(retired,oldest.getValue());receipts.remove(oldest.getKey());
             }
             data.put("receipts",receipts);data.put("retiredBefore",retired);
-            redis.opsForValue().set(key(id),data);
             return profile(data);
-        }
+        });
     }
 }

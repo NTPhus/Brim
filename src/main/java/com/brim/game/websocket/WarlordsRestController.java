@@ -18,11 +18,20 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class WarlordsRestController {
     private final WarlordsProfileService profiles;
-    public record Hub(WarlordsProfile profile,List<WarlordsCampaign.Chapter> chapters,List<WarlordsGame.Skill> skills) {}
+    private final com.brim.game.service.WarlordsCampaignArchive archive;
+    public record Hub(WarlordsProfile profile,List<WarlordsCampaign.Chapter> chapters,List<WarlordsGame.Skill> skills,List<WarlordsHeroes.Hero> heroes,com.brim.game.service.WarlordsCampaignArchive.Summary savedCampaign) {}
     public record Upgrade(@NotBlank @Size(max=8) String type) {}
+    public record HeroSelection(@NotBlank @Size(max=32) String heroId) {}
     @GetMapping
     public Hub hub(HttpServletRequest request) {
-        return new Hub(profiles.load(GuestSession.require(request.getSession(false)).id()),WarlordsCampaign.CHAPTERS,WarlordsGame.SKILLS);
+        String id=GuestSession.require(request.getSession(false)).id();
+        return new Hub(profiles.load(id),WarlordsCampaign.CHAPTERS,WarlordsGame.SKILLS,WarlordsHeroes.ALL,archive.summary(id));
+    }
+    @PostMapping("/hero")
+    public ResponseEntity<?> selectHero(@Valid @RequestBody HeroSelection selection,HttpServletRequest request) {
+        String id=GuestSession.require(request.getSession(false)).id();
+        try {return ResponseEntity.ok(profiles.selectHero(id,selection.heroId()));}
+        catch(IllegalArgumentException invalid) {return ResponseEntity.badRequest().body(Map.of("message",invalid.getMessage()));}
     }
     @PostMapping("/upgrade")
     public ResponseEntity<?> upgrade(@Valid @RequestBody Upgrade upgrade,HttpServletRequest request) {

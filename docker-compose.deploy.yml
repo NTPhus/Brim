@@ -15,6 +15,10 @@ services:
       SPRING_PROFILES_ACTIVE: deploy
       SPRING_DATA_REDIS_HOST: redis
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-game_platform}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-brim}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       GAME_RUNTIME_WORKERS: ${GAME_RUNTIME_WORKERS:-2}
       GAME_RUNTIME_MAX_ROOMS: ${GAME_RUNTIME_MAX_ROOMS:-64}
       GAME_BOT_WORKERS: ${GAME_BOT_WORKERS:-1}
@@ -23,9 +27,27 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
+    stop_grace_period: 45s
     mem_limit: 1g
     cpus: 2
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-game_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-brim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - warlords-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 512m
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction
@@ -71,5 +93,6 @@ services:
     restart: unless-stopped
     mem_limit: 1g
 volumes:
+  warlords-db-data:
   redis-data:
   kafka-data:

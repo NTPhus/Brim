@@ -67,6 +67,10 @@ public class TurnBasedGameController {
         TurnBasedGameService.TurnBasedGame game = turnBasedGameService.getGame(roomId);
         if (game != null || room.getStatus() == com.brim.game.model.dto.RoomStatus.FINISHED) {
             turnBasedGameService.sendState(roomId);
+        } else if(room.getGameType()==com.brim.game.model.dto.GameType.WARLORDS_CAMPAIGN
+                &&room.getStatus()==com.brim.game.model.dto.RoomStatus.IN_PROGRESS) {
+            // Redis rooms may outlive the JVM. Reattach the durable campaign on reconnect.
+            turnBasedGameService.initializeGame(room);
         } else if (room.getPlayers().size() >= room.getGameType().minimumPlayers() && room.getStatus() == com.brim.game.model.dto.RoomStatus.WAITING) {
             boolean allReady = room.getPlayers().stream().allMatch(Player::isReady);
             if (allReady) {

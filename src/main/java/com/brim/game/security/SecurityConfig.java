@@ -28,7 +28,7 @@ public class SecurityConfig {
                 .ignoringRequestMatchers("/ws/**"))
             .securityContext(context -> context.securityContextRepository(contexts))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/csrf", "/auth/guest", "/actuator/health", "/error").permitAll()
+                .requestMatchers("/auth/csrf", "/auth/guest", "/auth/register", "/auth/login", "/actuator/health", "/error").permitAll()
                 .requestMatchers("/auth/**", "/rooms/**", "/leaderboard", "/ws/**", "/warlords", "/warlords/**", "/vietnam").authenticated()
                 .anyRequest().denyAll())
             .requestCache(cache -> cache.disable())
@@ -44,8 +44,8 @@ public class SecurityConfig {
                     String key = request.getRemoteAddr();
                     if (!limits.allow("http:" + key, 120, 60)
                             || (!safe && !path.startsWith("/ws/") && !limits.allow("write:" + key, 30, 10))
-                            || (path.equals("/auth/guest") && request.getMethod().equals("POST")
-                                && !limits.allow("guest:" + key, 5, 1.0 / 30))) {
+                            || ((path.equals("/auth/guest")||path.equals("/auth/register")||path.equals("/auth/login")) && request.getMethod().equals("POST")
+                                && !limits.allow("identity:" + key, 8, 1.0 / 10))) {
                         response.setHeader("Retry-After", "3"); response.sendError(429); return;
                     }
                     if (!path.equals("/auth/csrf") && !path.equals("/auth/guest")

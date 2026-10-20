@@ -52,6 +52,27 @@ class WarlordsGameTest {
         start(game);assertEquals("a",game.getCurrentPlayerId());assertEquals("BATTLE",game.getState().phase());
         assertEquals(140,game.getState().fighters().get(0).maxHp());
     }
+    @Test void selectedHeroChangesCampaignStyleOnlyAndCannotChangeDuringBattle() {
+        var store=store();
+        var selected=new WarlordsProfile(100,0,0,0,0,1,List.of(),0,0,"DINH_LIEN");
+        when(store.load("a")).thenReturn(selected);when(store.selectHero("a","DINH_LIEN")).thenReturn(selected);
+        var campaign=game(false,store);
+        assertTrue(campaign.makeMove("a",command(campaign,"SELECT_HERO","DINH_LIEN",null)));
+        start(campaign);var hero=campaign.getState().fighters().get(0);
+        assertEquals("DINH_LIEN",hero.hero().id());assertEquals(128,hero.maxHp());assertEquals(6,hero.attack());
+        assertFalse(campaign.makeMove("a",command(campaign,"SELECT_HERO","NGUYEN_BAC",null)));
+        assertEquals(6,campaign.getState().heroes().size());
+        var duel=game(true,store);var pvp=duel.getState().fighters().get(0);
+        assertEquals("DINH_LIEN",pvp.hero().id());assertEquals(140,pvp.maxHp());assertEquals(5,pvp.attack());
+        assertEquals(10,pvp.energy());assertEquals(0,pvp.shield());assertEquals(0,pvp.skillRank());
+    }
+    @Test void botPacingDoesNotBlockWorkersAndCampaignDifficultyIncreases() {
+        var game=game(false,store());start(game);
+        assertTrue(game.makeMove("a",game.generateBotMove()));
+        assertFalse(game.botReady());ReflectionTestUtils.setField(game,"botReadyAt",0L);assertTrue(game.botReady());
+        assertEquals(1,WarlordsCampaign.chapter(1).botLevel());assertEquals(2,WarlordsCampaign.chapter(4).botLevel());
+        assertEquals(3,WarlordsCampaign.chapter(7).botLevel());assertEquals(4,WarlordsCampaign.chapter(12).botLevel());
+    }
     @Test void invalidSwapsAndStaleCommandsDoNotSpendTurnOrResources() {
         var game=game(true,store());var before=game.getState();
         assertFalse(game.makeMove("b",game.generateBotMove()));

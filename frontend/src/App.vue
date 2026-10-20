@@ -35,7 +35,7 @@ onUnmounted(() => window.removeEventListener('brim-session-expired', expired))
       </RouterLink>
       <nav>
         <RouterLink to="/">Đấu trường</RouterLink>
-        <button v-if="session.authenticated" @click="logout">Đăng xuất guest</button>
+        <button v-if="session.authenticated" @click="logout">{{session.account?'Đăng xuất':'Đăng xuất guest'}}</button>
       </nav>
     </header>
     <main class="app-main">

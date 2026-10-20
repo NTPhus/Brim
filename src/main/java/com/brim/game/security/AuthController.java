@@ -24,6 +24,8 @@ public class AuthController {
     private final HttpSessionSecurityContextRepository contexts;
     private final HttpSessionCsrfTokenRepository csrfTokens;
     private final SocketSessions sockets;
+    private final AccountService accounts;
+    private final AccountSessions accountSessions;
 
     @GetMapping("/csrf")
     public CsrfView csrf(CsrfToken token) { return new CsrfView(token.getHeaderName(), token.getToken()); }
@@ -33,15 +35,27 @@ public class AuthController {
 
     @PostMapping("/guest")
     public GuestSession guest(@Valid @RequestBody Profile requestBody, HttpServletRequest request, HttpServletResponse response) {
+        return establish(UUID.randomUUID().toString(),clean(requestBody.username()),false,request,response);
+    }
+    @PostMapping("/register")
+    public GuestSession register(@Valid @RequestBody Credentials body,HttpServletRequest request,HttpServletResponse response) {
+        GuestSession current=null;
+        try{current=GuestSession.require(request.getSession(false));}catch(org.springframework.web.server.ResponseStatusException ignored){}
+        var account=accounts.register(body.username(),body.password(),current);
+        return establish(account.id(),account.username(),true,request,response);
+    }
+    @PostMapping("/login")
+    public GuestSession login(@Valid @RequestBody Credentials body,HttpServletRequest request,HttpServletResponse response) {
+        var account=accounts.authenticate(body.username(),body.password());
+        return establish(account.id(),account.username(),true,request,response);
+    }
+    private GuestSession establish(String id,String username,boolean account,HttpServletRequest request,HttpServletResponse response) {
         // Repeated creation revokes the previous guest and every socket belonging to that session.
         var old = request.getSession(false);
         if (old != null) { sockets.revoke(old); old.invalidate(); }
 
         var session = request.getSession(true);
-
-        var guest = new GuestSession(UUID.randomUUID().toString(), clean(requestBody.username()),
-                System.currentTimeMillis() + 4 * 60 * 60 * 1000L);
-
+        var guest = new GuestSession(id,username,System.currentTimeMillis() + 4 * 60 * 60 * 1000L,account);
         session.setAttribute(GuestSession.ATTRIBUTE, guest);
         session.setMaxInactiveInterval(4 * 60 * 60);
 
@@ -54,14 +68,15 @@ public class AuthController {
         SecurityContextHolder.setContext(context);
 
         contexts.saveContext(context, request, response);
-        
+        if(account)accountSessions.replace(id,session);
         return guest;
     }
     @PutMapping("/profile")
     public GuestSession profile(@Valid @RequestBody Profile body, HttpServletRequest request) {
         var session = request.getSession(false);
         var guest = GuestSession.require(session);
-        var updated = new GuestSession(guest.id(), clean(body.username()), guest.expiresAt());
+        var updated = new GuestSession(guest.id(), clean(body.username()), guest.expiresAt(),guest.account());
+        if(guest.account())accounts.rename(guest.id(),updated.username());
         session.setAttribute(GuestSession.ATTRIBUTE, updated);
         return updated;
     }
@@ -78,5 +93,6 @@ public class AuthController {
         return name;
     }
     public record Profile(@NotBlank @Size(max = 32) String username) {}
+    public record Credentials(@NotBlank @Size(min=3,max=32) String username,@NotBlank @Size(min=8,max=72) String password) {}
     public record CsrfView(String headerName, String token) {}
 }

@@ -1,4 +1,4 @@
-export interface GuestIdentity { id: string; username: string; expiresAt: number }
+export interface GuestIdentity { id: string; username: string; expiresAt: number; account: boolean }
 interface Csrf { headerName: string; token: string }
 let csrf: Csrf | null = null
 export async function refreshCsrf(): Promise<Csrf> {

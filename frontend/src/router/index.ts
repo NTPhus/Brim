@@ -40,6 +40,7 @@ const router = createRouter({
     {
       path: '/game/tank/:roomId',
       name: 'tank',
+      meta: { gameViewport: true },
       component: () => import('@/views/TankView.vue'),
       props: true
     },

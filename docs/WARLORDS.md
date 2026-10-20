@@ -46,6 +46,25 @@ Nguồn đối chiếu tên/bối cảnh:
 
 ## Hồ sơ và phần thưởng
 
+### Chọn tướng
+
+Chọn một trong sáu tướng miễn phí ở hub hoặc bản đồ trong phòng chiến dịch. Lựa chọn lưu cùng hồ sơ Redis, giữ nguyên tài nguyên và tiến độ. Tướng mặc định của hồ sơ cũ là Đinh Bộ Lĩnh. Đổi tướng chỉ áp dụng ở trận tiếp theo; không đổi tướng giữa trận. Vai trò và chỉ số dưới đây là thiết kế hư cấu của game:
+
+| Tướng | Phong cách chiến dịch |
+|---|---|
+| Đinh Bộ Lĩnh | Chỉ số cân bằng ban đầu |
+| Đinh Liễn | −12 HP, +1 công/kiếm |
+| Nguyễn Bặc | +24 HP, −1 công/kiếm, 12 khiên đầu trận |
+| Đinh Điền | −8 HP, +1 binh pháp |
+| Lê Hoàn | 25 năng lượng đầu trận |
+| Dương Vân Nga | +12 HP, 16 khiên đầu trận |
+
+Các chỉ số cộng vào nâng cấp và cấp nhân vật trong chiến dịch. PvP dùng chân dung tướng đã chọn, luôn giữ 140 HP, 5 công/kiếm, binh pháp 0, 10 năng lượng và 0 khiên đầu trận.
+
+### Theo dõi lượt đối thủ
+
+Cả người chơi và đối thủ có bước làm nổi bật hai ô chọn trước khi đổi chỗ; lượt đối thủ dùng viền xanh. Tên người đang thao tác hiện trong thanh trạng thái, HP/năng lượng/khiên cập nhật theo từng đợt xóa quân hoặc kỹ năng. Các snapshot liên tiếp được xếp hàng để phát đủ lượt người và bot, thao tác bị khóa tới khi phát xong. Chế độ giảm chuyển động chuyển thẳng tới trạng thái mới nhất và vẫn hiện mô tả nước đi gần nhất.
+
 Hồ sơ khởi đầu có 100 vàng, cấp 1. Cứ 100 XP tăng một cấp, tối đa cấp 20. Mỗi cấp thêm 8 HP trong chiến dịch. Vũ khí, giáp và binh pháp nâng tối đa 5 lần:
 
 - Vũ khí: thêm 1 công/ô kiếm; giá `60 × (cấp nâng hiện tại + 1)`.
@@ -64,15 +83,16 @@ Hồ sơ lưu ở `profile:warlords:{playerId}` trong Redis, theo danh tính do 
 - Mỗi lệnh mang `encounterId` và `revision`. Lệnh trùng, trễ, sai lượt hoặc thuộc trận trước bị từ chối.
 - Nâng cấp và cộng thưởng được tuần tự hóa theo người chơi. Biên nhận chống nhận thưởng trùng; giữ 256 biên nhận gần nhất và watermark từ chối yêu cầu đã cũ. Cơ chế khóa hiện dành cho một backend, như kiến trúc BRIM hiện tại.
 - Nếu lưu thưởng thất bại, màn kết quả hiện nút **Lưu lại phần thưởng**; cần giữ phòng để thử lại. Đã lưu một bên thì thử lại không cộng bên đó lần nữa. Pending reward và trận đang đánh ở RAM; chưa có outbox/checkpoint để phục hồi các phần này sau khi backend bị restart.
-- Bot NPC và bot PvP dùng `BotExecutor`, chọn nước từ tài nguyên có thể ghép và tình hình HP/năng lượng; không đọc những quân chưa được sinh. Đây là AI heuristic, chưa có nhiều mức khó riêng.
+- Bot NPC và bot PvP dùng `BotExecutor`. Chiến dịch tăng độ khó mỗi ba chương: chương 1–3 tập sự chọn trong các bộ ghép tốt; 4–6 cân nhắc sát thương, hồi phục, khiên và kỹ năng; 7–9 đọc liên hoàn nhìn thấy và dè chừng phản công; 10–12 đánh giá nước đáp trả với trọng số đầy đủ. Bot PvP dùng mức 3. Tìm kiếm giới hạn tám nước ứng viên ở bước xét phản công, không đọc RNG hoặc quân chưa sinh; ô chưa biết giữ trống trong mô phỏng. Bot chờ tối thiểu 900 ms trước lượt, được scheduler thử lại, không chiếm worker bằng sleep.
 - WebSocket đồng bộ cả hai người. Snapshot tách khỏi bàn đang thay đổi. Trạng thái cuối PvP được giữ theo lifecycle phòng để tải lại vẫn xem kết quả.
 - Màn chiến đấu tự co bàn cờ theo chiều cao viewport, giữ HP và kỹ năng cùng màn hình ở cả chế độ dọc/ngang. Hướng dẫn, nhật ký và rút quân nằm trong hộp thoại “Hướng dẫn / Nhật ký”. Hoạt ảnh trượt đổi chỗ, xóa và rơi ô chạy tuần tự theo sự kiện SWAP/CLEAR/FALL từ máy chủ; khóa thao tác trong lúc xử lý và tôn trọng chế độ giảm chuyển động. Khi kết nối lại, giao diện lấy ngay bàn mới nhất. Có đạn/hiệu ứng sát thương và nút gợi ý một nước. Các SVG ô tài nguyên, tướng và bản đồ là mã tự tạo trong repo.
+- Bàn cờ hỗ trợ phím mũi tên để di chuyển, Enter/Space chọn hai ô kề nhau, Esc bỏ chọn; Tab chuyển sang điều khiển tiếp theo. Thanh lượt có thời gian còn lại trên 45 giây; mỗi kỹ năng hiện lý do bị khóa hoặc trạng thái sẵn sàng. Bảng tài nguyên trên desktop và hướng dẫn trên mobile giải thích hiệu ứng mỗi ô. Rời trận hoặc rút quân cần xác nhận trong giao diện; lúc nối lại mạng, bàn khóa thao tác đến khi nhận snapshot mới.
 
-Chưa có chọn nhiều tướng, bang hội, giao dịch, cửa hàng tiền thật, gacha, xếp hạng riêng, âm thanh hay tài khoản lâu dài. Chưa có quân đặc biệt kiểu ghép bốn/năm hoặc di chuyển tự do trên bản đồ; người chơi chọn các chương đã mở trên lộ trình.
+Chưa có bang hội, giao dịch, cửa hàng tiền thật, gacha, xếp hạng riêng, âm thanh hay tài khoản lâu dài. Chưa có quân đặc biệt kiểu ghép bốn/năm hoặc di chuyển tự do trên bản đồ; người chơi chọn các chương đã mở trên lộ trình.
 
 ## Mã và kiểm tra
 
-Engine: `game/warlords/CombatBoard`, `WarlordsGame`, `WarlordsCampaign`. Module: `config/WarlordsModules`. Lưu hồ sơ: `service/WarlordsProfileService`. REST: `GET /api/warlords`, `POST /api/warlords/upgrade` (chỉ nhận loại nâng cấp). REST và STOMP dùng chung danh tính phiên đã xác thực.
+Engine: `game/warlords/CombatBoard`, `WarlordsGame`, `WarlordsCampaign`. Module: `config/WarlordsModules`. Lưu hồ sơ: `service/WarlordsProfileService`. REST: `GET /api/warlords`, `POST /api/warlords/upgrade` (chỉ nhận loại nâng cấp), `POST /api/warlords/hero` (chỉ nhận heroId trong danh sách server). REST và STOMP dùng chung danh tính phiên đã xác thực.
 
 Frontend: `/warlords`, `/game/warlords-campaign/:roomId`, `/game/warlords-duel/:roomId`. Tạo phòng bằng enum `WARLORDS_CAMPAIGN` (một người) hoặc `WARLORDS_DUEL` (hai người).
 

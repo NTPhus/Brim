@@ -25,6 +25,9 @@ export class TankScene extends Phaser.Scene {
   private bulletOrigins:Array<{x:number;y:number}>=[]
   private snapshotAt=0
   private snapshotInterval=50
+  private mouseAim: { x: number; y: number } | null = null
+  private touchAim: { x: number; y: number } | null = null
+  private mouseShooting = false
 
   preload() {
     const base = '/assets/kenney-tanks/'
@@ -42,10 +45,32 @@ export class TankScene extends Phaser.Scene {
   create() {
     this.terrain = this.add.tileSprite(0, 0, 1, 1, 'tank-terrain').setOrigin(0).setDepth(-10).setTint(0x737e78)
     this.graphics = this.add.graphics().setDepth(5)
+    this.input.addPointer(2)
+    const aimPointer = (pointer: Phaser.Input.Pointer) => {
+      if (pointer.wasTouch) {
+        if (!pointer.isDown) return
+        const point = this.cameras.main.getWorldPoint(pointer.x, pointer.y)
+        this.touchAim = { x: point.x, y: point.y }
+        this.mouseAim = null
+      } else {
+        this.mouseAim = { x: pointer.x, y: pointer.y }
+        this.touchAim = null
+      }
+    }
+    this.input.on('pointermove', aimPointer)
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      aimPointer(pointer)
+      // Touch selects an aim point. The separate HUD button controls firing.
+      if (!pointer.wasTouch && pointer.button === 0) this.mouseShooting = true
+    })
+    this.input.on('pointerup', () => this.releasePointer())
+    this.input.on('pointerupoutside', () => this.releasePointer())
+    this.input.on('gameout', () => this.releasePointer())
     this.events.once('shutdown', () => {
       this.sprites.clear(); this.renderedPositions.clear(); this.previousHealth.clear()
       this.projectileSprites = []
       this.effects.clear();this.lastState=null;this.cameraReady=false;this.bulletOrigins=[];this.snapshotAt=0
+      this.mouseAim=null;this.touchAim=null;this.mouseShooting=false
     })
   }
 
@@ -92,9 +117,16 @@ export class TankScene extends Phaser.Scene {
 
   getAim(): { targetX: number; targetY: number; shooting: boolean } | null {
     if (!this.cameraReady || this.lastState?.mode !== 'ASSAULT') return null
-    const pointer = this.input.activePointer
-    const point = this.cameras.main.getWorldPoint(pointer.x, pointer.y)
-    return { targetX: point.x, targetY: point.y, shooting: pointer.isDown && pointer.button === 0 }
+    const tank = this.lastState.tanks[this.playerId]
+    if (!tank) return null
+    const point = this.touchAim ?? (this.mouseAim
+      ? this.cameras.main.getWorldPoint(this.mouseAim.x, this.mouseAim.y)
+      : { x: tank.x + Math.cos(tank.turretAngle) * 500, y: tank.y + Math.sin(tank.turretAngle) * 500 })
+    return { targetX: point.x, targetY: point.y, shooting: this.mouseShooting }
+  }
+
+  releasePointer() {
+    this.mouseShooting = false
   }
 
   setPlayerId(id: string) {
@@ -171,7 +203,7 @@ export class TankScene extends Phaser.Scene {
         .setRotation(state.mode === 'ASSAULT' ? Phaser.Math.Angle.Wrap(tank.turretAngle - rendered.angle) : 0)
       if (!tank.alive || !sprite.visible) continue
       this.graphics.fillStyle(0x101a16, .9).fillRoundedRect(rendered.x - 21, rendered.y - 34, 42, 6, 3)
-      this.graphics.fillStyle(tank.health > 30 ? 0x84e6a5 : 0xff8071)
+      this.graphics.fillStyle(tank.health / (tank.maxHealth || 100) > .3 ? 0x84e6a5 : 0xff8071)
         .fillRoundedRect(rendered.x - 20, rendered.y - 33, 40 * Math.max(0, tank.health) / (tank.maxHealth || 100), 4, 2)
       if ((tank.shieldUntil ?? 0) > Date.now()) this.graphics.lineStyle(3, 0x7cd9fa, .8).strokeCircle(rendered.x, rendered.y, 30)
       if (isMe) this.graphics.lineStyle(2, 0xc4f7e5, .8).strokeCircle(rendered.x, rendered.y, 26)

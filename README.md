@@ -173,6 +173,8 @@ Khi tạo phòng Tank, chọn một trong hai chế độ:
 
 Trong Đột kích, E nhận vật tư từ hòm hữu hạn, F sửa xe trong 8 giây đứng yên, dùng một bộ sửa để hồi tối đa 180 HP tới ngưỡng 70% HP tối đa. Di chuyển, bắn hoặc trúng đòn ngắt sửa và hoàn lại bộ sửa. Nhiên liệu ban đầu đủ đi 3.000 unit; hòm giữ phần vật tư chưa lấy hết. Hạ lính nhận 25 điểm/tiếp tế, hạ tank nhận 100; qua đợt nhận 75 tiếp tế, không tự hồi máu. Nâng cấp tối đa 3 cấp với giá 100/200/300: động cơ tăng quãng đường đi được trên cùng nhiên liệu 10% mỗi cấp, pháo thêm 15 sát thương mỗi cấp (vẫn nạp 6 giây), giáp thêm 35 HP mỗi cấp. Mỗi 3 đợt chuyển map và nhận các kho hữu hạn của chặng mới. Xe bị phá hủy không hồi sinh trong lượt; toàn đội bị hạ thì kết thúc. Reconnect giữ tài nguyên; chủ phòng có thể bắt đầu lượt mới khi đội mắc kẹt.
 
+Giao diện Tank có HUD riêng cho HP, đạn/nạp pháo và nhiên liệu; bảng tác chiến hiển thị tiếp tế, sửa chữa, nâng cấp và tình trạng đội xe. Các nút giải thích điều kiện sử dụng, giá và phần tài nguyên còn thiếu. Trên màn hình cảm ứng, dùng cụm nút tiến/lùi/xoay và nút bắn riêng; chạm chiến trường để ngắm trong Assault. Nhả điều khiển, chuyển tab hoặc mất kết nối sẽ ngừng gửi thao tác di chuyển/bắn đang giữ.
+
 Dấu chân Việt dùng chung cơ chế xe nặng trong màn tank, đồng thời có đạn dự trữ hữu hạn cho bộ binh. Xem [trạng thái triển khai P0 và phần còn lại](docs/VIETNAM_CAMPAIGN.md#16-trạng-thái-triển-khai-p0-ngày-19102026).
 
 ![Tank Battle](docs/images/tank-preview.png)

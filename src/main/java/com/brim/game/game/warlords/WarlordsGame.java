@@ -5,6 +5,7 @@ import com.brim.game.game.warlords.WarlordsProfile.Claim;
 import com.brim.game.model.dto.MessageType;
 import com.brim.game.model.dto.Player;
 import com.brim.game.service.TurnBasedGameService.TurnBasedGame;
+import com.brim.game.service.WarlordsCampaignArchive;
 import java.util.*;
 
 public final class WarlordsGame implements TurnBasedGame {
@@ -17,29 +18,38 @@ public final class WarlordsGame implements TurnBasedGame {
         new Skill("GUARD","Thiết bích",20,"Nhận 40 khiên, tối đa 80.")
     );
     public record Fighter(String id,String name,int hp,int maxHp,int energy,int shield,int attack,int skillRank,
-                          int gold,int experience,boolean bot,int missedTurns) {}
+                          int gold,int experience,boolean bot,int missedTurns,WarlordsHeroes.Hero hero) {}
     public record Effects(int damage,int absorbed,int healing,int energy,int shield,int gold,int experience,int combo) {}
     public record Event(String type,String actor,String text,List<Cell> cells,int[][] board,Effects effects) {}
     public record Reward(String playerId,int gold,int experience) {}
+    public record SavedCampaign(int version,String playerId,long seed,String phase,String status,String winner,String encounterId,
+                                long revision,int turn,int turnNumber,int chapter,long remainingTurnMs,CombatBoard.Saved board,
+                                List<Fighter> fighters,WarlordsProfile profile,List<Reward> rewards,Map<String,Claim> pendingClaims,String notice,WarlordsCampaign.Chapter chapterSpec) {}
     public record State(String mode,String phase,String status,String winner,String currentPlayer,String encounterId,
                         long revision,long turnDeadline,int turnNumber,int[][] board,List<Fighter> fighters,
                         WarlordsCampaign.Chapter chapter,List<WarlordsCampaign.Chapter> chapters,List<Skill> skills,
                         WarlordsProfile profile,List<Event> events,List<Reward> rewards,boolean rewardsPending,
-                        boolean practice,String notice) {}
+                        boolean practice,String notice,List<WarlordsHeroes.Hero> heroes) {}
     private static final class Unit {
         String id,name;int hp,maxHp,energy=10,shield,attack,skillRank,gold,experience,missedTurns;
-        Fighter snapshot(){return new Fighter(id,name,hp,maxHp,energy,shield,attack,skillRank,gold,experience,id.startsWith("bot-"),missedTurns);}
+        WarlordsHeroes.Hero hero;
+        Fighter snapshot(){return new Fighter(id,name,hp,maxHp,energy,shield,attack,skillRank,gold,experience,id.startsWith("bot-"),missedTurns,hero);}
+        WarlordsBot.Stats stats(){return new WarlordsBot.Stats(hp,maxHp,energy,shield,attack,skillRank);}
     }
     private final boolean duel;
     private final WarlordsProfile.Store profiles;
-    private final long seed;
+    private long seed;
+    private WarlordsCampaignArchive archive;
+    private String roomId;
+    private long generation;
     private String player1,player2,name1,name2;
     private String phase="MAP",status="IN_PROGRESS",winner,encounterId=UUID.randomUUID().toString(),notice="";
     private WarlordsProfile profile;
+    private WarlordsCampaign.Chapter chapterSpec;
     private CombatBoard board;
     private final Unit[] units=new Unit[2];
     private int turn,turnNumber,chapter;
-    private long revision,turnDeadline;
+    private long revision,turnDeadline,botReadyAt;
     private List<Event> events=List.of();
     private List<Reward> rewards=List.of();
     private final Map<String,Claim> pendingClaims=new LinkedHashMap<>();
@@ -50,6 +60,9 @@ public final class WarlordsGame implements TurnBasedGame {
     public WarlordsGame(String roomId,boolean duel,WarlordsProfile.Store profiles,long seed) {
         this.duel=duel;this.profiles=profiles;this.seed=seed;
     }
+    public WarlordsGame(String roomId,WarlordsProfile.Store profiles,WarlordsCampaignArchive archive) {
+        this(roomId,false,profiles);this.roomId=roomId;this.archive=archive;
+    }
     @Override public Class<?> moveType(){return Move.class;}
     @Override public synchronized void setPlayer1(String id){player1=id;name1=id;}
     @Override public synchronized void setPlayer2(String id){player2=id;name2=id;}
@@ -57,7 +70,14 @@ public final class WarlordsGame implements TurnBasedGame {
         if(players.isEmpty()||(duel&&players.size()<2))throw new IllegalArgumentException("Thiếu người chơi.");
         player1=players.get(0).getId();name1=players.get(0).getUsername();
         if(duel){player2=players.get(1).getId();name2=players.get(1).getUsername();start(0);}
-        else {profile=profiles.load(player1);phase="MAP";}
+        else {
+            profile=profiles.load(player1);phase="MAP";
+            if(archive!=null) {
+                var lease=archive.acquire(player1,roomId);generation=lease.generation();
+                if(lease.saved()!=null){restore(lease.saved(),true);profile=profiles.load(player1);}
+                archive.transact(player1,roomId,generation,()->true,this::save);
+            }
+        }
     }
     @Override public synchronized String getCurrentPlayerId(){return phase.equals("BATTLE")?units[turn].id:player1;}
     @Override public synchronized boolean isGameOver(){return status.equals("FINISHED");}
@@ -66,6 +86,12 @@ public final class WarlordsGame implements TurnBasedGame {
     private boolean member(String id){return id!=null&&(id.equals(player1)||(duel&&id.equals(player2)));}
     private boolean validToken(Move move){return move.revision()!=null&&move.revision()==revision&&encounterId.equals(move.encounterId());}
     @Override public synchronized boolean makeMove(String id,Object input) {
+        if(archive==null)return applyMove(id,input);
+        var before=save();
+        try{return archive.transact(player1,roomId,generation,()->applyMove(id,input),this::save);}
+        catch(RuntimeException failure){recover(before);throw failure;}
+    }
+    private boolean applyMove(String id,Object input) {
         // Campaign NPC commands are generated by the bounded bot worker, not accepted as room members.
         boolean npc=!duel&&units[1]!=null&&units[1].id.equals(id)&&phase.equals("BATTLE");
         if((!member(id)&&!npc)||isGameOver()||!(input instanceof Move move)||move.action()==null||!validToken(move))return false;
@@ -74,6 +100,9 @@ public final class WarlordsGame implements TurnBasedGame {
         }
         if(!pendingClaims.isEmpty())return false;
         if(!duel&&id.equals(player1)) {
+            if(move.action().equals("SELECT_HERO")&&phase.equals("MAP")) {
+                profile=profiles.selectHero(player1,move.option());events=List.of();notice="Đã chọn tướng. Xuất quân để bắt đầu trận mới.";revision++;return true;
+            }
             if(move.action().equals("MAP")&&!phase.equals("BATTLE")) {
                 profile=profiles.load(player1);phase="MAP";events=List.of();notice="";revision++;return true;
             }
@@ -117,16 +146,31 @@ public final class WarlordsGame implements TurnBasedGame {
         return true;
     }
     private void start(int number) {
+        chapterSpec=number==0?null:WarlordsCampaign.chapter(number);
         chapter=number;encounterId=UUID.randomUUID().toString();winner=null;status="IN_PROGRESS";phase="BATTLE";
         turn=0;turnNumber=1;events=List.of();rewards=List.of();pendingClaims.clear();notice="";
         board=new CombatBoard(seed+revision*104729L+number*7919L);
         units[0]=unit(player1,name1,duel?140:profile.maxHp(),duel?5:profile.attack(),duel?0:profile.skill());
-        if(duel)units[1]=unit(player2,name2,140,5,0);
+        equip(units[0],duel?heroFor(player1):WarlordsHeroes.saved(profile.heroId()));
+        if(duel){units[1]=unit(player2,name2,140,5,0);equip(units[1],heroFor(player2));}
         else {
-            var spec=WarlordsCampaign.chapter(number);
+            var spec=chapterSpec;
             units[1]=unit("bot-warlord-"+number,spec.warlord(),spec.enemyHp(),spec.enemyAttack(),(number-1)/4);
         }
         turnDeadline=System.currentTimeMillis()+45_000;
+        botReadyAt=System.currentTimeMillis()+900;
+    }
+    private WarlordsHeroes.Hero heroFor(String id) {
+        if(id.startsWith("bot-"))return WarlordsHeroes.saved("DINH_LIEN");
+        WarlordsProfile stored=profiles.load(id);
+        return WarlordsHeroes.saved(stored==null?null:stored.heroId());
+    }
+    private void equip(Unit unit,WarlordsHeroes.Hero hero) {
+        unit.hero=hero;
+        if(!duel) {
+            unit.name=hero.name();unit.hp=unit.maxHp+=hero.hpBonus();unit.attack+=hero.attackBonus();
+            unit.skillRank+=hero.skillBonus();unit.energy=hero.startingEnergy();unit.shield=hero.startingShield();
+        }
     }
     private Unit unit(String id,String name,int hp,int attack,int skillRank) {
         Unit unit=new Unit();unit.id=id;unit.name=name==null?id:name;unit.hp=unit.maxHp=hp;unit.attack=attack;unit.skillRank=skillRank;return unit;
@@ -179,6 +223,7 @@ public final class WarlordsGame implements TurnBasedGame {
             if(units[turn].hp==0){finish(1-turn,"Đội quân đã kiệt sức.");return;}
         }
         turn=1-turn;turnNumber++;turnDeadline=System.currentTimeMillis()+45_000;
+        botReadyAt=System.currentTimeMillis()+900;
     }
     private void finish(int winningSide,String reason) {
         winner=units[winningSide].id;phase="RESULT";turnDeadline=0;notice=reason;
@@ -187,8 +232,8 @@ public final class WarlordsGame implements TurnBasedGame {
         for(int i=0;i<2;i++) {
             Unit actor=units[i];if(actor.id.startsWith("bot-")||practice)continue;
             boolean won=i==winningSide;
-            int gold=duel?(won?25:5)+Math.min(40,actor.gold)/(won?1:2):won?WarlordsCampaign.chapter(chapter).gold()+actor.gold:actor.gold/2;
-            int xp=duel?(won?30:10)+Math.min(60,actor.experience)/(won?1:2):won?WarlordsCampaign.chapter(chapter).experience()+actor.experience:10+actor.experience/2;
+            int gold=duel?(won?25:5)+Math.min(40,actor.gold)/(won?1:2):won?chapterSpec.gold()+actor.gold:actor.gold/2;
+            int xp=duel?(won?30:10)+Math.min(60,actor.experience)/(won?1:2):won?chapterSpec.experience()+actor.experience:10+actor.experience/2;
             grants.add(new Reward(actor.id,gold,xp));
             pendingClaims.put(actor.id,new Claim(encounterId,System.currentTimeMillis(),chapter,duel,won,gold,xp));
         }
@@ -209,6 +254,12 @@ public final class WarlordsGame implements TurnBasedGame {
         if(duel&&pendingClaims.isEmpty())status="FINISHED";
     }
     @Override public synchronized boolean advanceClock(Set<String> members) {
+        if(archive==null||!phase.equals("BATTLE")||System.currentTimeMillis()<turnDeadline)return applyClock(members);
+        var before=save();
+        try{return archive.transact(player1,roomId,generation,()->applyClock(members),this::save);}
+        catch(RuntimeException failure){recover(before);throw failure;}
+    }
+    private boolean applyClock(Set<String> members) {
         if(!phase.equals("BATTLE")||isGameOver())return false;
         if(duel&&(!members.contains(player1)||!members.contains(player2))) {
             finish(members.contains(player1)?0:1,"Đối thủ đã rời phòng.");revision++;return true;
@@ -220,30 +271,53 @@ public final class WarlordsGame implements TurnBasedGame {
         if(actor.hp==0||actor.missedTurns>=3)finish(1-turn,"Đối thủ không hoàn thành lượt.");else finishTurn();
         return true;
     }
+    @Override public synchronized boolean botReady() {return System.currentTimeMillis()>=botReadyAt;}
     @Override public synchronized Move generateBotMove() {
         if(!phase.equals("BATTLE")||isGameOver())return null;
         Unit actor=units[turn],enemy=units[1-turn];
-        if(actor.hp<actor.maxHp/2&&actor.energy>=25)return command("SKILL","HEAL",null);
-        if(actor.energy>=30&&(enemy.hp+enemy.shield<=28+actor.skillRank*6||actor.energy>=60))return command("SKILL","STRIKE",null);
-        CombatBoard.Swap best=null;int bestScore=Integer.MIN_VALUE;
-        for(var move:board.legalMoves()) {
-            int[] count=board.preview(move);
-            int score=count[1]*actor.attack*5+Math.min(100-actor.energy,count[2]*6)*2
-                    +Math.min(actor.maxHp-actor.hp,count[3]*3)*3+Math.min(80-actor.shield,count[4]*4)
-                    +count[5]+count[6];
-            if(score>bestScore){bestScore=score;best=move;}
-        }
-        return best==null?null:command("SWAP",null,best);
+        int level=duel?3:chapterSpec.botLevel();
+        var choice=WarlordsBot.choose(board.snapshot(),actor.stats(),enemy.stats(),level,seed+turnNumber);
+        return choice==null?null:command(choice.swap()==null?"SKILL":"SWAP",choice.skill(),choice.swap());
     }
     private Move command(String action,String option,CombatBoard.Swap swap) {
         return new Move(action,swap==null?null:swap.row(),swap==null?null:swap.column(),swap==null?null:swap.toRow(),swap==null?null:swap.toColumn(),option,null,encounterId,revision);
+    }
+    public synchronized SavedCampaign save() {
+        return new SavedCampaign(1,player1,seed,phase,status,winner,encounterId,revision,turn,turnNumber,chapter,
+                Math.max(0,turnDeadline-System.currentTimeMillis()),board==null?null:board.save(),
+                Arrays.stream(units).filter(Objects::nonNull).map(Unit::snapshot).toList(),profile,List.copyOf(rewards),Map.copyOf(pendingClaims),notice,chapterSpec);
+    }
+    public synchronized void flush(){if(archive!=null)archive.transact(player1,roomId,generation,()->true,this::save);}
+    private void recover(SavedCampaign before) {
+        // A lost commit reply is ambiguous: read durable truth before accepting another command.
+        try{var committed=archive.latest(player1,roomId,generation);restore(committed==null?before:committed,false);}
+        catch(RuntimeException unavailable){restore(before,false);}
+    }
+    private void restore(SavedCampaign saved,boolean resume) {
+        if(saved.version()!=1||!Objects.equals(player1,saved.playerId())||!Set.of("MAP","BATTLE","RESULT").contains(saved.phase())
+                ||saved.turn()<0||saved.turn()>1||saved.chapter()<0||saved.chapter()>WarlordsCampaign.CHAPTERS.size()
+                ||(!saved.phase().equals("MAP")&&(saved.board()==null||saved.fighters().size()!=2||saved.chapter()==0)))
+            throw new IllegalArgumentException("Bản lưu chiến dịch không tương thích. Dữ liệu vẫn được giữ nguyên.");
+        seed=saved.seed();phase=saved.phase();status=saved.status();winner=saved.winner();encounterId=saved.encounterId();
+        revision=saved.revision();turn=saved.turn();turnNumber=saved.turnNumber();chapter=saved.chapter();
+        chapterSpec=saved.chapterSpec();
+        board=saved.board()==null?null:CombatBoard.restore(saved.board());
+        Arrays.fill(units,null);
+        for(int i=0;i<saved.fighters().size();i++) {
+            Fighter f=saved.fighters().get(i);Unit u=unit(f.id(),f.name(),f.maxHp(),f.attack(),f.skillRank());
+            u.hp=f.hp();u.energy=f.energy();u.shield=f.shield();u.gold=f.gold();u.experience=f.experience();u.missedTurns=f.missedTurns();u.hero=f.hero();units[i]=u;
+        }
+        profile=saved.profile();rewards=List.copyOf(saved.rewards());pendingClaims.clear();pendingClaims.putAll(saved.pendingClaims());
+        events=List.of();notice=resume?"Đã khôi phục chiến dịch tại lượt gần nhất được lưu.":saved.notice();
+        turnDeadline=phase.equals("BATTLE")?System.currentTimeMillis()+(resume?Math.max(5000,Math.min(45000,saved.remainingTurnMs())):saved.remainingTurnMs()):0;
+        botReadyAt=System.currentTimeMillis()+900;
     }
     @Override public synchronized State getState() {
         List<Event> copied=events.stream().map(e->new Event(e.type(),e.actor(),e.text(),e.cells(),CombatBoard.copy(e.board()),e.effects())).toList();
         List<Fighter> fighters=Arrays.stream(units).filter(Objects::nonNull).map(Unit::snapshot).toList();
         return new State(duel?"DUEL":"CAMPAIGN",phase,status,winner,getCurrentPlayerId(),encounterId,revision,turnDeadline,turnNumber,
-                board==null?new int[0][0]:board.snapshot(),fighters,chapter==0?null:WarlordsCampaign.chapter(chapter),
+                board==null?new int[0][0]:board.snapshot(),fighters,chapterSpec,
                 duel?List.of():WarlordsCampaign.CHAPTERS,SKILLS,duel?null:profile,copied,rewards,!pendingClaims.isEmpty(),
-                duel&&(player1.startsWith("bot-")||player2.startsWith("bot-")),notice);
+                duel&&(player1.startsWith("bot-")||player2.startsWith("bot-")),notice,WarlordsHeroes.ALL);
     }
 }

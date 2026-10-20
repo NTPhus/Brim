@@ -6,7 +6,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 /** Identity is issued by the server, never reconstructed from localStorage or request IDs. */
-public record GuestSession(String id, String username, long expiresAt) implements Serializable {
+public record GuestSession(String id, String username, long expiresAt, boolean account) implements Serializable {
+    public GuestSession(String id,String username,long expiresAt){this(id,username,expiresAt,false);}
     public static final String ATTRIBUTE = GuestSession.class.getName();
     public static GuestSession require(HttpSession session) {
         try {

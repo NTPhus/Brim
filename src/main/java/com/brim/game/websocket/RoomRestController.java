@@ -33,6 +33,11 @@ public class RoomRestController {
         var guest = GuestSession.require(http.getSession(false));
         access.claimedIdentity(request.hostId(), guest.id());
         String hostId = guest.id();
+        if(request.gameType()==GameType.WARLORDS_CAMPAIGN) {
+            var existing=roomService.getAllRooms().stream().filter(room->room.getGameType()==GameType.WARLORDS_CAMPAIGN
+                    &&hostId.equals(room.getHostId())&&(room.getStatus()==com.brim.game.model.dto.RoomStatus.WAITING||room.getStatus()==com.brim.game.model.dto.RoomStatus.IN_PROGRESS)).findFirst();
+            if(existing.isPresent())return ResponseEntity.ok(existing.get());
+        }
         if (roomService.getAllRooms().stream().filter(room -> hostId.equals(room.getHostId())).count() >= 3)
             throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, "Room limit per player reached");
         GameRoom room = roomService.createRoom(

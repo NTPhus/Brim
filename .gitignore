@@ -1,5 +1,7 @@
 # Java / Maven
 /target/
+/data/
+/backups/
 *.class
 *.log
 # Frontend build outputs

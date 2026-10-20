@@ -36,6 +36,7 @@ public class TurnBasedGameService {
 
     private final Map<String, TurnBasedGame> activeGames = new ConcurrentHashMap<>();
     private final Map<String, TurnBasedGame> finishedGames = new ConcurrentHashMap<>();
+    private volatile boolean stopping;
 
     public void processMove(String roomId, String playerId, Object move) {
         var room = roomService.getRoom(roomId);
@@ -45,6 +46,7 @@ public class TurnBasedGameService {
     }
 
     private void processRoomMove(String roomId, String playerId, Object move) {
+        if(stopping){sendMoveError(roomId,playerId,"Server đang bảo trì. Tiến trình đã lưu có thể tiếp tục khi server mở lại.");return;}
         TurnBasedGame game = activeGames.get(roomId);
         if (game == null) {
             log.warn("Game not found for room: {}", roomId);
@@ -66,6 +68,12 @@ public class TurnBasedGameService {
             sendMoveError(roomId, playerId, invalid.getMessage());
             return;
         }
+        catch (RuntimeException unavailable) {
+            log.warn("Move could not be committed for room {}",roomId,unavailable);
+            sendMoveError(roomId,playerId,"Chưa lưu được lượt chơi. Nước đi chưa được xác nhận; hãy thử lại khi kết nối ổn định.");
+            broadcastGameState(roomId,game);
+            return;
+        }
         if (valid) {
             if (game.realtime()) return; // The shared tick publishes authoritative snapshots.
             var room = roomService.getRoom(roomId);
@@ -84,6 +92,7 @@ public class TurnBasedGameService {
             }
         } else {
             sendMoveError(roomId, playerId, "Invalid move");
+            if(game instanceof com.brim.game.game.warlords.WarlordsGame)broadcastGameState(roomId,game);
         }
     }
 
@@ -120,6 +129,17 @@ public class TurnBasedGameService {
     }
 
     private void initializeRoom(GameRoom room) {
+        if(stopping)throw new IllegalStateException("Server đang bảo trì.");
+        if(room.getGameType()==GameType.WARLORDS_CAMPAIGN) {
+            activeGames.forEach((otherId,other)->{
+                var otherRoom=roomService.getRoom(otherId);
+                if(!otherId.equals(room.getId())&&otherRoom!=null&&otherRoom.getGameType()==GameType.WARLORDS_CAMPAIGN
+                        &&room.getHostId().equals(otherRoom.getHostId())&&activeGames.remove(otherId,other)) {
+                    otherRoom.setStatus(RoomStatus.CANCELLED);roomService.saveRoom(otherRoom);
+                    messagingTemplate.convertAndSend("/topic/room/"+otherId+"/state",otherRoom);
+                }
+            });
+        }
         if (!room.hasHumanPlayers()) {
             roomService.deleteRoomIfNoHumans(room.getId());
             return;
@@ -192,10 +212,11 @@ public class TurnBasedGameService {
     }
 
     private void triggerBotTurnIfNeeded(String roomId, TurnBasedGame game) {
+        if(stopping)return;
         var room = roomService.getRoom(roomId);
         if (room == null || !room.hasHumanPlayers()) return;
         String current = game.getCurrentPlayerId();
-        if (current == null || !current.startsWith("bot-") || game.isGameOver() || !pendingBots.add(roomId)) return;
+        if (current == null || !current.startsWith("bot-") || game.isGameOver() || !game.botReady() || !pendingBots.add(roomId)) return;
         boolean accepted = botExecutor.submit(() -> {
             try {
                 var currentRoom = roomService.getRoom(roomId);
@@ -214,6 +235,7 @@ public class TurnBasedGameService {
     // Bounded worker queue: retry busy rooms rather than enqueue unlimited searches.
     @Scheduled(fixedDelay = 500)
     public void resumeWaitingBots() {
+        if(stopping)return;
         activeGames.forEach((roomId, game) -> {
             var room = roomService.getRoom(roomId);
             if (room == null) activeGames.remove(roomId, game);
@@ -221,8 +243,10 @@ public class TurnBasedGameService {
                 synchronized (room) {
                     if (activeGames.get(roomId) != game) return;
                     if (!room.hasHumanPlayers()) { roomService.deleteRoomIfNoHumans(roomId); return; }
-                    boolean changed = game.advanceClock(room.getPlayers().stream().map(com.brim.game.model.dto.Player::getId)
-                            .collect(java.util.stream.Collectors.toSet()));
+                    boolean changed;
+                    try {changed = game.advanceClock(room.getPlayers().stream().map(com.brim.game.model.dto.Player::getId)
+                            .collect(java.util.stream.Collectors.toSet()));}
+                    catch(RuntimeException unavailable){log.warn("Unable to save clock update for room {}",roomId);return;}
                     if (changed) {
                         broadcastGameState(roomId, game);
                         if (game.isGameOver()) { endGame(roomId, game); return; }
@@ -233,6 +257,14 @@ public class TurnBasedGameService {
         });
         finishedGames.keySet().removeIf(roomId -> roomService.getRoom(roomId) == null);
     }
+    @Scheduled(fixedDelay=30000,initialDelay=30000)
+    public void saveCampaigns() {
+        activeGames.forEach((roomId,game)->{
+            if(game instanceof com.brim.game.game.warlords.WarlordsGame warlords)
+                try{warlords.flush();}catch(RuntimeException unavailable){log.warn("Campaign autosave failed for room {}",roomId);}
+        });
+    }
+    @jakarta.annotation.PreDestroy public void prepareShutdown(){stopping=true;saveCampaigns();}
 
     private void endGame(String roomId, TurnBasedGame game) {
         var room = roomService.getRoom(roomId);
@@ -298,6 +330,7 @@ public class TurnBasedGameService {
         default void tick() {}
         default void retainPlayers(java.util.Set<String> members) {}
         default boolean advanceClock(java.util.Set<String> members) { return false; }
+        default boolean botReady() { return true; }
         Class<?> moveType();
         boolean makeMove(String playerId, Object move);
         Object getState();

@@ -10,6 +10,9 @@ async function result<T>(response: Response): Promise<T> {
   return response.json()
 }
 export async function getWarlordsHub(): Promise<WarlordsHub> { return result(await apiFetch('/api/warlords')) }
+export async function selectWarlordsHero(heroId: string): Promise<WarlordsProfile> {
+  return result(await apiFetch('/api/warlords/hero', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ heroId }) }))
+}
 export async function upgradeWarlords(type: string): Promise<WarlordsProfile> {
   return result(await apiFetch('/api/warlords/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type }) }))
 }

@@ -8,6 +8,7 @@ RUN mvn -B package -DskipTests
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 RUN groupadd --system brim && useradd --system --gid brim brim
+RUN mkdir -p /app/data && chown brim:brim /app/data
 COPY --from=build --chown=brim:brim /build/target/game-platform-1.0.0-SNAPSHOT.jar app.jar
 USER brim
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=65 -XX:+ExitOnOutOfMemoryError"

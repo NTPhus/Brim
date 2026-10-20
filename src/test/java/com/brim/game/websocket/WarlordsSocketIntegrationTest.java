@@ -31,12 +31,14 @@ import static org.mockito.ArgumentMatchers.*;
     "debug=false","spring.kafka.listener.auto-startup=false","spring.data.redis.repositories.enabled=false",
     "logging.level.root=WARN","logging.level.org.springframework=WARN","logging.level.com.brim.game=WARN",
     "logging.level.org.springframework.web.socket=ERROR","logging.level.org.springframework.kafka=ERROR",
-    "spring.jpa.show-sql=false"
+    "spring.jpa.show-sql=false","spring.datasource.url=jdbc:h2:mem:warlords-socket;MODE=PostgreSQL;DB_CLOSE_DELAY=-1"
 })
 class WarlordsSocketIntegrationTest {
     @LocalServerPort int port;
     @Autowired TestRestTemplate http;
     @Autowired TurnBasedGameService games;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired com.brim.game.security.RequestLimits limits;
     @MockBean(answer=org.mockito.Answers.RETURNS_DEEP_STUBS) RedisTemplate<String,Object> redis;
     @MockBean KafkaAdmin kafkaAdmin;
     @MockBean GameEventProducer events;
@@ -44,6 +46,9 @@ class WarlordsSocketIntegrationTest {
     private final Set<Object> listed=ConcurrentHashMap.newKeySet();
     private final List<WebSocketStompClient> clients=new ArrayList<>();
     @BeforeEach @SuppressWarnings("unchecked") void mockStorage() {
+        http.getRestTemplate().setRequestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory());
+        jdbc.update("DELETE FROM warlords_documents");jdbc.update("DELETE FROM brim_accounts");
+        ((Map<?,?>)org.springframework.test.util.ReflectionTestUtils.getField(limits,"buckets")).clear();
         ValueOperations<String,Object> values=mock(ValueOperations.class);SetOperations<String,Object> sets=mock(SetOperations.class);
         when(redis.opsForValue()).thenReturn(values);when(redis.opsForSet()).thenReturn(sets);
         when(values.get(anyString())).thenAnswer(call->stored.get(call.getArgument(0)));
@@ -53,7 +58,7 @@ class WarlordsSocketIntegrationTest {
         when(sets.add(eq("rooms:list"),any())).thenAnswer(call->listed.add(call.getArgument(1))?1L:0L);
         when(sets.remove(eq("rooms:list"),any())).thenAnswer(call->listed.remove(call.getArgument(1))?1L:0L);
     }
-    @AfterEach void stopClients(){clients.forEach(WebSocketStompClient::stop);}
+    @AfterEach void stopClients(){listed.forEach(id->games.removeGame(String.valueOf(id)));clients.forEach(WebSocketStompClient::stop);}
     private String base(){return "http://localhost:"+port+"/api";}
     private final class User {
         String cookie,token,header,id,name;
@@ -75,7 +80,10 @@ class WarlordsSocketIntegrationTest {
         }
         void csrf(){var response=request(HttpMethod.GET,"/auth/csrf",null);assertEquals(HttpStatus.OK,response.getStatusCode());token=response.getBody().path("token").asText();header=response.getBody().path("headerName").asText();}
         void connect(String roomId) throws Exception {
-            var transports=List.<Transport>of(new WebSocketTransport(new StandardWebSocketClient()));
+            var container=jakarta.websocket.ContainerProvider.getWebSocketContainer();
+            // Campaign snapshots include all chapter descriptions and the hero roster.
+            container.setDefaultMaxTextMessageBufferSize(256*1024);
+            var transports=List.<Transport>of(new WebSocketTransport(new StandardWebSocketClient(container)));
             var client=new WebSocketStompClient(new SockJsClient(transports));clients.add(client);
             client.setMessageConverter(new MappingJackson2MessageConverter());client.setDefaultHeartbeat(new long[]{0,0});
             var handshake=new WebSocketHttpHeaders();handshake.set(HttpHeaders.COOKIE,cookie);
@@ -107,6 +115,10 @@ class WarlordsSocketIntegrationTest {
     @Test void twoAuthenticatedPlayersShareBoardThenSettleAndRestoreResult() throws Exception {
         assertEquals(HttpStatus.UNAUTHORIZED,http.getForEntity(base()+"/warlords",String.class).getStatusCode());
         var a=new User("General A");var b=new User("General B");
+        assertEquals(6,a.request(HttpMethod.GET,"/warlords",null).getBody().path("heroes").size());
+        assertEquals(HttpStatus.BAD_REQUEST,a.request(HttpMethod.POST,"/warlords/hero",Map.of("heroId","INVALID")).getStatusCode());
+        assertEquals("LE_HOAN",a.request(HttpMethod.POST,"/warlords/hero",Map.of("heroId","LE_HOAN")).getBody().path("heroId").asText());
+        assertEquals("NGUYEN_BAC",b.request(HttpMethod.POST,"/warlords/hero",Map.of("heroId","NGUYEN_BAC")).getBody().path("heroId").asText());
         var created=a.request(HttpMethod.POST,"/rooms",Map.of("name","Sơn Hà test","gameType","WARLORDS_DUEL","maxPlayers",2));
         assertEquals(HttpStatus.OK,created.getStatusCode());String room=created.getBody().path("id").asText();
         assertEquals(HttpStatus.OK,b.request(HttpMethod.POST,"/rooms/"+room+"/join",Map.of("playerId",b.id)).getStatusCode());
@@ -116,6 +128,10 @@ class WarlordsSocketIntegrationTest {
         assertEquals("BATTLE",first.path("phase").asText());assertEquals(first.path("board"),other.path("board"));
         assertEquals(first.path("encounterId"),other.path("encounterId"));
         assertEquals(a.id,first.path("currentPlayer").asText());
+        assertEquals("LE_HOAN",first.path("fighters").get(0).path("hero").path("id").asText());
+        assertEquals(10,first.path("fighters").get(0).path("energy").asInt());
+        assertEquals(140,first.path("fighters").get(1).path("maxHp").asInt());
+        assertEquals(0,first.path("fighters").get(1).path("shield").asInt());
         var engine=(WarlordsGame)games.getGame(room);var move=engine.generateBotMove();
         a.send(room,"move",move);
         JsonNode moved=a.after(0),movedOther=b.after(0);
@@ -134,5 +150,54 @@ class WarlordsSocketIntegrationTest {
         assertEquals(105,b.request(HttpMethod.GET,"/warlords",null).getBody().path("profile").path("gold").asInt());
         a.states.clear();a.send(room,"join",Map.of("id",a.id,"username",a.name,"ready",true));
         assertEquals("RESULT",a.state().path("phase").asText());assertNull(games.getGame(room));
+    }
+    @Test void campaignPublishesHumanAndBotBoardActionsInOrder() throws Exception {
+        var user=new User("Campaign General");
+        var created=user.request(HttpMethod.POST,"/rooms",Map.of("name","Campaign replay","gameType","WARLORDS_CAMPAIGN","maxPlayers",1));
+        assertEquals(HttpStatus.OK,created.getStatusCode());String room=created.getBody().path("id").asText();
+        user.connect(room);user.send(room,"ready",Map.of());
+        var map=user.state();assertEquals("MAP",map.path("phase").asText());
+        user.send(room,"move",Map.of("action","SELECT_HERO","option","LE_HOAN","encounterId",map.path("encounterId").asText(),"revision",map.path("revision").asLong()));
+        var selected=user.after(map.path("revision").asLong());
+        assertEquals("LE_HOAN",selected.path("profile").path("heroId").asText());
+        assertEquals(1,selected.path("chapters").get(0).path("botLevel").asInt());
+        assertEquals(4,selected.path("chapters").get(11).path("botLevel").asInt());
+        user.send(room,"move",Map.of("action","START","chapter",1,"encounterId",selected.path("encounterId").asText(),"revision",selected.path("revision").asLong()));
+        var battle=user.after(selected.path("revision").asLong());
+        assertEquals(140,battle.path("fighters").get(0).path("maxHp").asInt());
+        assertEquals(25,battle.path("fighters").get(0).path("energy").asInt());
+        // A defensive skill passes the turn without risking a random first-turn victory.
+        user.send(room,"move",Map.of("action","SKILL","option","GUARD","encounterId",battle.path("encounterId").asText(),"revision",battle.path("revision").asLong()));
+        var human=user.after(battle.path("revision").asLong());
+        assertEquals("bot-warlord-1",human.path("currentPlayer").asText());
+        assertEquals(user.id,human.path("events").get(0).path("actor").asText());
+        var bot=user.after(human.path("revision").asLong());
+        assertEquals(user.id,bot.path("currentPlayer").asText());
+        var swap=bot.path("events").get(0);
+        assertEquals("SWAP",swap.path("type").asText());assertEquals("bot-warlord-1",swap.path("actor").asText());
+        assertEquals(2,swap.path("cells").size());assertEquals(8,swap.path("board").size());
+        assertTrue(bot.path("revision").asLong()>human.path("revision").asLong());
+        games.removeGame(room);
+    }
+    @Test void registrationKeepsGuestProgressAndNewLoginRestoresCampaignAfterEngineLoss() throws Exception {
+        var first=new User("Account General");
+        assertEquals("LE_HOAN",first.request(HttpMethod.POST,"/warlords/hero",Map.of("heroId","LE_HOAN")).getBody().path("heroId").asText());
+        String room=first.request(HttpMethod.POST,"/rooms",Map.of("name","Saved campaign","gameType","WARLORDS_CAMPAIGN","maxPlayers",1)).getBody().path("id").asText();
+        first.connect(room);var map=first.state();
+        first.send(room,"move",Map.of("action","START","chapter",1,"encounterId",map.path("encounterId").asText(),"revision",map.path("revision").asLong()));
+        var battle=first.after(map.path("revision").asLong());
+        var registered=first.request(HttpMethod.POST,"/auth/register",Map.of("username","permanent_general","password","a-long-password"));
+        assertEquals(HttpStatus.OK,registered.getStatusCode());assertEquals(first.id,registered.getBody().path("id").asText());assertTrue(registered.getBody().path("account").asBoolean());first.csrf();
+        games.removeGame(room); // Redis room remains; simulate the previous JVM's missing runtime.
+        var second=new User("New device");
+        assertEquals(HttpStatus.UNAUTHORIZED,second.request(HttpMethod.POST,"/auth/login",Map.of("username","permanent_general","password","wrong-password")).getStatusCode());
+        var login=second.request(HttpMethod.POST,"/auth/login",Map.of("username","permanent_general","password","a-long-password"));
+        assertEquals(HttpStatus.OK,login.getStatusCode());second.id=login.getBody().path("id").asText();second.name=login.getBody().path("username").asText();second.csrf();
+        assertEquals(first.id,second.id);assertEquals(HttpStatus.UNAUTHORIZED,first.request(HttpMethod.GET,"/auth/session",null).getStatusCode());
+        var hub=second.request(HttpMethod.GET,"/warlords",null).getBody();assertEquals("LE_HOAN",hub.path("profile").path("heroId").asText());assertEquals("BATTLE",hub.path("savedCampaign").path("phase").asText());
+        second.connect(room);var restored=second.state();
+        assertEquals("BATTLE",restored.path("phase").asText());assertEquals(battle.path("board"),restored.path("board"));assertEquals(battle.path("fighters"),restored.path("fighters"));
+        second.send(room,"move",Map.of("action","SKILL","option","GUARD","encounterId",restored.path("encounterId").asText(),"revision",restored.path("revision").asLong()));
+        var moved=second.after(restored.path("revision").asLong());assertEquals(40,moved.path("fighters").get(0).path("shield").asInt());
     }
 }

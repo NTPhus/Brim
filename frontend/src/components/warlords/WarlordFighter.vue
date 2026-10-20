@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { WarlordsFighter } from '@/types/warlords'
+import WarlordPortrait from './WarlordPortrait.vue'
 defineProps<{ fighter: WarlordsFighter; mine?: boolean; active?: boolean; side: number }>()
 </script>
 <template>
   <section class="fighter-card" :class="{ mine, active, fallen: fighter.hp === 0 }" :aria-label="`${fighter.name}: ${fighter.hp}/${fighter.maxHp} HP, ${fighter.energy} năng lượng, ${fighter.shield} khiên`">
     <div class="fighter-heading">
-      <div class="general-portrait" :class="`side-${side}`" aria-hidden="true"><svg viewBox="0 0 100 110"><path d="M13 109 22 80 41 70h18l19 10 9 29" fill="#34414b"/><path d="m20 85 20-13 10 34 10-34 20 13-5 24H25Z" fill="currentColor"/><path d="M32 41h36v18c-2 14-11 19-18 19S33 70 32 59Z" fill="#bf9873"/><path d="m31 42 4-19 15-7 15 7 4 19-8-4-11-2-11 2Z" fill="currentColor" stroke="#e4c688" stroke-width="2"/><path d="M50 5v30M25 42l25-6 25 6" stroke="#dfc187" stroke-width="5" stroke-linecap="round"/><path d="m37 52 7 1m12 0 7-1" stroke="#483729" stroke-width="3"/><path d="m43 65 7 9 7-9" fill="#47382e"/><path d="m39 88 11 8 11-8M26 98h13m22 0h13" stroke="#d9ba78" stroke-width="2"/></svg></div>
-      <div class="fighter-name"><span>{{ mine ? 'QUÂN CỦA BẠN' : fighter.bot ? 'ĐỐI THỦ' : 'NGƯỜI THÁCH ĐẤU' }}</span><strong>{{ fighter.name }}</strong><small>{{ fighter.attack }} công/kiếm · {{ fighter.skillRank }} binh pháp</small></div><span v-if="active" class="turn-badge">ĐẾN LƯỢT</span>
+      <WarlordPortrait :hero="fighter.hero" :side="side"/>
+      <div class="fighter-name"><span>{{ mine ? 'QUÂN CỦA BẠN' : fighter.bot ? 'ĐỐI THỦ' : 'NGƯỜI THÁCH ĐẤU' }}</span><strong>{{ fighter.name }}</strong><span v-if="fighter.hero" class="hero-identity">{{ fighter.hero.title }} · {{ fighter.hero.name }}</span><small>{{ fighter.attack }} công/kiếm · {{ fighter.skillRank }} binh pháp</small></div><span v-if="active" class="turn-badge">ĐẾN LƯỢT</span>
     </div>
     <div class="fighter-bar-label"><span>HP</span><strong>{{ fighter.hp }} <small>/ {{ fighter.maxHp }}</small></strong></div>
     <div class="fighter-meter hp" role="progressbar" :aria-valuenow="fighter.hp" :aria-valuemax="fighter.maxHp" aria-valuemin="0" aria-label="Máu"><span :style="{width:`${fighter.hp/fighter.maxHp*100}%`}"/></div>

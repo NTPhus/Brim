@@ -1,15 +1,20 @@
 export interface WarlordsProfile {
   gold: number; experience: number; weapon: number; armor: number; skill: number;
-  unlocked: number; cleared: number[]; wins: number; losses: number
+  unlocked: number; cleared: number[]; wins: number; losses: number; heroId: string
+}
+export interface WarlordsHero {
+  id: string; name: string; title: string; description: string; color: string; emblem: string;
+  hpBonus: number; attackBonus: number; skillBonus: number; startingEnergy: number; startingShield: number
 }
 export interface WarlordsChapter {
   id: number; title: string; warlord: string; location: string; story: string; victory: string;
-  encounter: string; enemyHp: number; enemyAttack: number; gold: number; experience: number; x: number; y: number
+  encounter: string; enemyHp: number; enemyAttack: number; gold: number; experience: number; x: number; y: number;
+  botLevel: number; botStyle: string
 }
 export interface WarlordsSkill { id: string; name: string; cost: number; description: string }
 export interface WarlordsFighter {
   id: string; name: string; hp: number; maxHp: number; energy: number; shield: number; attack: number;
-  skillRank: number; gold: number; experience: number; bot: boolean; missedTurns: number
+  skillRank: number; gold: number; experience: number; bot: boolean; missedTurns: number; hero: WarlordsHero | null
 }
 export interface WarlordsEvent {
   type: string; actor: string; text: string; cells: Array<{ row: number; column: number }>; board: number[][];
@@ -20,9 +25,9 @@ export interface WarlordsState {
   currentPlayer: string; encounterId: string; revision: number; turnDeadline: number; turnNumber: number;
   board: number[][]; fighters: WarlordsFighter[]; chapter: WarlordsChapter | null; chapters: WarlordsChapter[];
   skills: WarlordsSkill[]; profile: WarlordsProfile | null; events: WarlordsEvent[];
-  rewards: Array<{ playerId: string; gold: number; experience: number }>; rewardsPending: boolean; practice: boolean; notice: string
+  rewards: Array<{ playerId: string; gold: number; experience: number }>; rewardsPending: boolean; practice: boolean; notice: string; heroes: WarlordsHero[]
 }
-export interface WarlordsHub { profile: WarlordsProfile; chapters: WarlordsChapter[]; skills: WarlordsSkill[] }
+export interface WarlordsHub { profile: WarlordsProfile; chapters: WarlordsChapter[]; skills: WarlordsSkill[]; heroes: WarlordsHero[]; savedCampaign:{chapter:number;phase:'BATTLE'|'RESULT';updatedAt:number}|null }
 export const resourceNames = ['', 'Kiếm', 'Năng lượng', 'Hồi máu', 'Khiên', 'Vàng', 'Kinh nghiệm']
 export const heroLevel = (profile: WarlordsProfile) => Math.min(20, 1 + Math.floor(profile.experience / 100))
 export const upgrades = [
