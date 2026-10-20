@@ -175,6 +175,12 @@ Trong Đột kích, E nhận vật tư từ hòm hữu hạn, F sửa xe trong 8
 
 Giao diện Tank có HUD riêng cho HP, đạn/nạp pháo và nhiên liệu; bảng tác chiến hiển thị tiếp tế, sửa chữa, nâng cấp và tình trạng đội xe. Các nút giải thích điều kiện sử dụng, giá và phần tài nguyên còn thiếu. Trên màn hình cảm ứng, dùng cụm nút tiến/lùi/xoay và nút bắn riêng; chạm chiến trường để ngắm trong Assault. Nhả điều khiển, chuyển tab hoặc mất kết nối sẽ ngừng gửi thao tác di chuyển/bắn đang giữ.
 
+**Mục tiêu khu vực trong Assault:** mỗi map có ba điểm cần chiếm lần lượt. Đưa xe còn hoạt động vào vòng đánh dấu, có đường tiếp cận và không có địch tranh chấp để tích đủ 8 giây; rời vòng hoặc có địch thì tạm dừng tiến độ. Chiếm điểm thưởng một lần 40 điểm/tiếp tế cho mỗi xe còn hoạt động, đồng thời mở kho hữu hạn gồm 6 viên đạn, 400 nhiên liệu và 1 bộ sửa. Phải vừa chiếm xong điểm vừa dọn hết địch mới sang đợt tiếp theo; sau ba điểm chuyển map. HUD chỉ đường, tiến độ và minimap đánh dấu mục tiêu công khai; không công bố số địch ngoài vùng quan sát.
+
+Bộ binh ném lựu đạn có dấu cảnh báo màu cam ở vị trí sắp nổ trong 1,4 giây. Có thể di chuyển khỏi vùng hoặc dùng vật che chặn vụ nổ. Màn chơi thêm đường vận tải, vệt bánh xích, hố đất, mục tiêu khu vực và dấu dự đoán điểm va chạm của phát bắn. Classic giữ luật đối kháng riêng.
+
+**Bối cảnh lịch sử:** tám layout được gắn các nhiệm vụ chiến thuật sáng tác, lấy cảm hứng từ hiệp đồng tại Làng Vây năm 1968, mạng lưới hậu cần Trường Sơn và vai trò tăng thiết giáp trong tháng 4/1975. Bảng lệnh hành quân trong trận có mốc thời gian, nguồn đọc thêm và nêu rõ đây là màn hư cấu, không phải bản đồ/tái hiện nguyên trạng sự kiện. Nguồn: [Bảo tàng Lịch sử Quân sự Việt Nam — tín hiệu hiệp đồng ở Làng Vây](https://cauchuyenlichsu.vn/ky-uc-song-mai/khau-sung-hieu-lenh-trong-tran-danh-lang-vay), [Bảo tàng Lịch sử quốc gia — đường Trường Sơn](https://baotanglichsu.vn/vi/Articles/3096/18043/djuong-truong-son-con-djuong-noi-hau-phuong-va-tien-tuyen.html), [hiện vật tăng thiết giáp](https://baotanglichsu.vn/vi/Articles/1508/51535/bao-vat-quoc-gia-trong-bao-tang-luc-luong-tang-thiet-giap.html).
+
 Dấu chân Việt dùng chung cơ chế xe nặng trong màn tank, đồng thời có đạn dự trữ hữu hạn cho bộ binh. Xem [trạng thái triển khai P0 và phần còn lại](docs/VIETNAM_CAMPAIGN.md#16-trạng-thái-triển-khai-p0-ngày-19102026).
 
 ![Tank Battle](docs/images/tank-preview.png)

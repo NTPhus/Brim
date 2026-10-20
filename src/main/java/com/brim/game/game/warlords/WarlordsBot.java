@@ -43,7 +43,8 @@ public final class WarlordsBot {
                 foe=new Stats(Math.max(0,foe.hp()-raw+absorbed),foe.maxHp(),foe.energy(),foe.shield()-absorbed,foe.attack(),foe.skillRank());
                 loot+=count[5]+count[6];if(foe.hp()==0)break;
             }
-            result.add(new Candidate(new Choice(null,move),projected.board(),actor,foe,value(self,enemy,actor,foe)+loot*.15));
+            result.add(new Candidate(new Choice(null,move),projected.board(),actor,foe,value(self,enemy,actor,foe)+loot*.15
+                    +specialPotential(projected.board())-specialPotential(board)));
         }
         if(self.energy()>=30) {
             int raw=28+self.skillRank()*6,absorbed=Math.min(enemy.shield(),raw);
@@ -60,6 +61,16 @@ public final class WarlordsBot {
             result.add(new Candidate(new Choice("GUARD",null),board,actor,enemy,value(self,enemy,actor,enemy)));
         }
         return result;
+    }
+    private static double specialPotential(int[][] board) {
+        double value=0;
+        for(int[] row:board)for(int tile:row)value+=switch(CombatBoard.special(tile)) {
+            case CombatBoard.ROW,CombatBoard.COLUMN->2;
+            case CombatBoard.AREA->3;
+            case CombatBoard.CROSS->4;
+            default->0;
+        };
+        return value;
     }
     private static double value(Stats before,Stats target,Stats after,Stats foe) {
         if(foe.hp()==0)return 100_000;

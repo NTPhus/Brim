@@ -3,12 +3,14 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBoardSession } from '@/composables/useBoardSession'
 import type { WarlordsState, WarlordsEvent, WarlordsFighter, WarlordsSkill } from '@/types/warlords'
-import { resourceNames } from '@/types/warlords'
+import { resourceNames, tileName, tileResource, tileSpecial } from '@/types/warlords'
 import WarlordTile from '@/components/warlords/WarlordTile.vue'
 import WarlordFighter from '@/components/warlords/WarlordFighter.vue'
 import WarlordsMap from '@/components/warlords/WarlordsMap.vue'
 import WarlordsCamp from '@/components/warlords/WarlordsCamp.vue'
 import WarlordsHeroes from '@/components/warlords/WarlordsHeroes.vue'
+import WarlordsFormations from '@/components/warlords/WarlordsFormations.vue'
+import WarlordsHistory from '@/components/warlords/WarlordsHistory.vue'
 import '@/game/warlords.css'
 import { useGameMotion } from '@/composables/useGameMotion'
 import { animatePuzzleFrame } from '@/game/puzzleMotion'
@@ -53,6 +55,13 @@ const myTurn=computed(()=>state.value?.phase==='BATTLE'&&state.value.currentPlay
 const canAct=computed(()=>myTurn.value&&connected.value&&!syncing.value&&!pending.value&&!animating.value&&seconds.value>0)
 const chapter=computed(()=>state.value?.chapters.find(item=>item.id===selectedChapter.value))
 const board=computed(()=>display.value??state.value?.board??[])
+const specialCount=computed(()=>board.value.flat().filter(value=>tileSpecial(value)>0).length)
+const eventCells=computed(()=>new Set((playingEvent.value?.cells??[]).map(cell=>`${cell.row},${cell.column}`)))
+const selectionPrompt=computed(()=>{
+  if(!selected.value)return ''
+  const value=board.value[selected.value.row]?.[selected.value.column]??0
+  return tileSpecial(value)?`${tileName(value)} · đổi với một ô kề để kích hoạt`:`Đã chọn ${tileName(value)} · chọn một ô kề bên`
+})
 const seconds=computed(()=>Math.max(0,Math.ceil(((state.value?.turnDeadline??0)-now.value)/1000)))
 const turnProgress=computed(()=>Math.min(100,seconds.value/45*100))
 const attrition=computed(()=>state.value&&state.value.turnNumber>=40?4+Math.floor((state.value.turnNumber-40)/4):0)
@@ -77,7 +86,7 @@ const statusText=computed(()=>{
   if(!state.value)return 'Đang chuẩn bị thế trận…'
   if(animating.value&&playingEvent.value){
     const event=playingEvent.value
-    return `${actorName(event.actor)} · ${event.type==='SWAP'?'đang chọn và đổi hai ô':event.type==='CLEAR'?'đang ghép quân':event.type==='FALL'?'quân đang rơi':event.type==='SKILL'?event.text:'đang hoàn tất nước đi'}`
+    return `${actorName(event.actor)} · ${event.type==='SWAP'?'đang chọn và đổi hai ô':event.type==='CLEAR'?'đang ghép quân':event.type==='FALL'?'quân đang rơi':['SKILL','SPECIAL_CREATED','SPECIAL_ACTIVATED'].includes(event.type)?event.text:'đang hoàn tất nước đi'}`
   }
   if(state.value.phase==='RESULT')return won.value?'Chiến thắng!':`${winnerName.value} đã thắng trận này.`
   if(state.value.phase==='MAP')return 'Chọn một chương đã mở để xuất quân.'
@@ -139,13 +148,14 @@ function navigateBoard(event:KeyboardEvent,row:number,column:number){
 }
 function matched(cells:number[][]){
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){
-    const value=cells[r][c]
-    if(value>0&&((c<6&&cells[r][c+1]===value&&cells[r][c+2]===value)||(r<6&&cells[r+1][c]===value&&cells[r+2][c]===value)))return true
+    const value=tileResource(cells[r][c])
+    if(value>0&&((c<6&&tileResource(cells[r][c+1])===value&&tileResource(cells[r][c+2])===value)||(r<6&&tileResource(cells[r+1][c])===value&&tileResource(cells[r+2][c])===value)))return true
   }
   return false
 }
 function validSwap(r:number,c:number,y:number,x:number){
   if(!state.value)return false
+  if(tileSpecial(state.value.board[r]?.[c]??0)||tileSpecial(state.value.board[y]?.[x]??0))return true
   const cells=state.value.board.map(row=>[...row]);[cells[r][c],cells[y][x]]=[cells[y][x],cells[r][c]]
   return matched(cells)
 }
@@ -158,7 +168,7 @@ function choose(row:number,column:number){
   if(old.row===row&&old.column===column){selected.value=null;return}
   if(Math.abs(old.row-row)+Math.abs(old.column-column)!==1){selected.value={row,column};return}
   selected.value=null
-  if(!validSwap(old.row,old.column,row,column)){error.value='Nước đổi chưa tạo được bộ ba. Bạn không mất lượt.';return}
+  if(!validSwap(old.row,old.column,row,column)){error.value='Hãy ghép ít nhất ba ô cùng tài nguyên hoặc đổi một quân đặc biệt. Bạn không mất lượt.';return}
   send('SWAP',{row:old.row,column:old.column,toRow:row,toColumn:column})
 }
 function showHint(){
@@ -186,6 +196,11 @@ async function playFrames(){
   }
   await animatePuzzleFrame(grid.value,before,{type:type??'',cells:frame.event?.cells??[],board:frame.board},motion,()=>{display.value=frame.board},()=>!disposed&&version===generation)
   if(disposed||version!==generation)return
+  if(type==='SPECIAL_CREATED'||type==='SPECIAL_ACTIVATED'){
+    await Promise.all((frame.event?.cells??[]).map(cell=>motion.animate(grid.value?.children[cell.row*8+cell.column],
+      [{filter:'brightness(1)',transform:'scale(1)'},{filter:'brightness(1.85)',transform:'scale(1.1)'},{filter:'brightness(1)',transform:'scale(1)'}],type==='SPECIAL_CREATED'?260:360)))
+    if(disposed||version!==generation)return
+  }
   movingCells.value=[]
   const effect=frame.event?.effects
   if(effect&&frame.event){
@@ -219,6 +234,8 @@ watch(state,next=>{
   if(action)lastAction.value=action.type==='SWAP'
     ?`${actorName(action.actor)} đổi ô (${action.cells[0].row+1}, ${action.cells[0].column+1}) ↔ (${action.cells[1].row+1}, ${action.cells[1].column+1})`
     :`${actorName(action.actor)} · ${action.text}`
+  const formationAction=next.events.find(event=>event.type==='SPECIAL_ACTIVATED')??next.events.find(event=>event.type==='SPECIAL_CREATED')
+  if(formationAction)lastAction.value=`${actorName(formationAction.actor)} · ${formationAction.text}`
   for(const event of next.events)if(event.text)log.value.unshift({actor:next.fighters.find(f=>f.id===event.actor)?.name??'',text:event.text})
   log.value=log.value.slice(0,18)
   if(next.phase==='MAP'){display.value=null;return}
@@ -284,11 +301,12 @@ onUnmounted(()=>{disposed=true;generation++;motion.cancel();queue.length=0;windo
         <div v-if="state.phase==='RESULT'&&!animating" class="battle-result war-panel" :class="{ victory:won }" role="status"><div><span class="war-eyebrow">{{ won?'KHẢI HOÀN':'TẠM LUI BINH' }}</span><h2>{{ won?'Ngọn cờ của bạn đã chiến thắng':`${winnerName} giành chiến thắng` }}</h2><p>{{ mode==='CAMPAIGN'&&won?state.chapter?.victory:state.notice }}</p><p v-if="reward" class="result-rewards">Phần thưởng trận: ◈ {{ reward.gold }} vàng · ✦ {{ reward.experience }} XP <small v-if="mode==='CAMPAIGN'&&won">(chưa gồm thưởng lần đầu qua chương)</small></p><p v-if="state.practice" class="war-muted">Trận luyện tập với bot, không cộng vàng và XP.</p><p v-if="state.rewardsPending" class="war-error">{{ state.notice }}</p></div><div class="result-actions"><button v-if="state.rewardsPending" class="war-button" :disabled="pending||!connected" @click="send('CLAIM')">Lưu lại phần thưởng</button><template v-else-if="mode==='CAMPAIGN'"><button class="war-button" :disabled="pending||!connected" @click="send('MAP')">Về bản đồ / nâng cấp</button><button v-if="!won" class="war-button secondary" :disabled="pending||!connected" @click="send('START',{chapter:state.chapter?.id})">Thử lại chương</button></template><button v-else-if="room?.hostId===game.session.player.id" class="war-button" :disabled="!connected||(room?.players.length??0)<2" @click="game.restart">Đấu lại</button><p v-else class="war-muted">Chủ phòng có thể bắt đầu ván mới.</p></div></div>
         <div class="combat-layout">
           <section class="combat-board-panel war-panel">
-            <div class="board-heading"><span class="war-eyebrow">THẾ TRẬN · LƯỢT {{ state.turnNumber }}<small class="last-action" :title="lastAction">{{ selected?`Đã chọn ${resourceNames[board[selected.row][selected.column]]} · chọn một ô kề bên`:hint.length?'Đổi hai ô có viền sáng để tạo bộ ba':lastAction || (state.chapter ? `AI ${state.chapter.botLevel}/4 · ${state.chapter.botStyle}` : 'Hai tướng cùng thao tác trên bàn') }}</small></span><button class="war-button secondary small" :disabled="!canAct" @click="showHint">Gợi ý một nước</button></div>
+            <div class="board-heading"><span class="war-eyebrow">THẾ TRẬN · LƯỢT {{ state.turnNumber }}<b v-if="specialCount" class="formation-count">{{ specialCount }} kỳ trận</b><small class="last-action" :title="selectionPrompt||lastAction">{{ selectionPrompt || (hint.length?'Đổi hai ô có viền sáng để ghép hoặc kích hoạt kỳ trận':lastAction || (state.chapter ? `AI ${state.chapter.botLevel}/4 · ${state.chapter.botStyle}` : 'Ghép 4 ô để tạo quân đặc biệt')) }}</small></span><button class="war-button secondary small" :disabled="!canAct" @click="showHint">Gợi ý một nước</button></div>
             <p id="board-keyboard-help" class="visually-hidden">Dùng phím mũi tên để chọn ô, Enter hoặc Space để đánh dấu hai ô kề nhau. Escape bỏ chọn. Tab chuyển sang kỹ năng.</p>
             <div ref="grid" class="combat-grid" :class="{ waiting:!myTurn, resolving:animating }" :aria-busy="animating" role="group" aria-label="Bàn chiến đấu 8 hàng 8 cột" aria-describedby="board-keyboard-help">
-              <template v-for="(row,r) in board" :key="r"><button v-for="(value,c) in row" :key="c" class="combat-tile" :class="[`type-${value}`,{ selected:selected?.row===r&&selected?.column===c,hint:hint.includes(`${r},${c}`),'move-cell':movingCells.includes(`${r},${c}`),'opponent-cell':opponentMoving&&movingCells.includes(`${r},${c}`) }]" :disabled="!canAct||value===0" :tabindex="focusedCell===r*8+c?0:-1" :aria-label="`Hàng ${r+1}, cột ${c+1}: ${resourceNames[value]||'ô trống'}`" :aria-pressed="selected?.row===r&&selected?.column===c" @focus="focusedCell=r*8+c" @keydown="navigateBoard($event,r,c)" @click="choose(r,c)"><WarlordTile v-if="value" :value="value"/></button></template>
+              <template v-for="(row,r) in board" :key="r"><button v-for="(value,c) in row" :key="c" class="combat-tile" :class="[`type-${tileResource(value)}`,`special-${tileSpecial(value)}`,{ selected:selected?.row===r&&selected?.column===c,hint:hint.includes(`${r},${c}`),'move-cell':movingCells.includes(`${r},${c}`),'opponent-cell':opponentMoving&&movingCells.includes(`${r},${c}`),'special-tile':tileSpecial(value)>0,'special-activating':playingEvent?.type==='SPECIAL_ACTIVATED'&&eventCells.has(`${r},${c}`),'special-created':playingEvent?.type==='SPECIAL_CREATED'&&eventCells.has(`${r},${c}`) }]" :disabled="!canAct||value===0" :tabindex="focusedCell===r*8+c?0:-1" :aria-label="`Hàng ${r+1}, cột ${c+1}: ${tileName(value)}`" :title="tileSpecial(value)?`${tileName(value)} · đổi ô kề để kích hoạt`:undefined" :aria-pressed="selected?.row===r&&selected?.column===c" @focus="focusedCell=r*8+c" @keydown="navigateBoard($event,r,c)" @click="choose(r,c)"><WarlordTile v-if="value" :value="value"/></button></template>
             </div>
+            <span v-if="animating&&(playingEvent?.effects?.combo??0)>1" class="chain-callout" aria-hidden="true">Liên hoàn ×{{ playingEvent?.effects?.combo }}</span>
           </section>
           <aside class="combat-sidebar">
             <section class="war-panel skills-panel" aria-label="Kỹ năng chiến đấu">
@@ -304,15 +322,19 @@ onUnmounted(()=>{disposed=true;generation++;motion.cancel();queue.length=0;windo
               <p v-if="attrition" class="attrition-warning">Hao quân: −{{ attrition }} HP sau khi ra quân, xuyên khiên.</p>
               <p v-else class="war-muted">Từ lượt 40, hao quân trừ HP sau mỗi lần ra quân.</p>
             </section>
+            <section class="war-panel special-field-guide"><WarlordsFormations compact/></section>
           </aside>
         </div>
       </template>
       <dialog ref="details" class="battle-details war-panel" aria-labelledby="battle-details-heading" @close="confirmRetreat=false;leaveAfterRetreat=false">
         <div class="details-heading"><h2 id="battle-details-heading">Hướng dẫn & diễn biến</h2><button class="war-button secondary small" autofocus @click="details?.close()">Đóng ✕</button></div>
             <div class="resource-guide"><span v-for="item in resourceGuide" :key="item.value"><WarlordTile :value="item.value"/><small>{{ resourceNames[item.value] }}</small><strong>{{ item.effect }}</strong></span></div>
-            <p class="board-help">Đổi hai ô kề nhau để ghép từ 3 hình cùng loại. Liên hoàn tăng sát thương kiếm thêm 25% mỗi đợt, tối đa 75%. Đổi hợp lệ hoặc dùng kỹ năng kết thúc lượt; nước không tạo bộ ba không mất lượt.</p>
+            <p class="board-help">Đổi hai ô kề nhau để ghép từ 3 tài nguyên cùng loại. Ghép 4, 5 hoặc hình T/L để tạo quân đặc biệt; các dấu ngang, dọc, nổ và chữ thập cho biết hiệu ứng. Đổi hợp lệ hoặc dùng kỹ năng kết thúc lượt. Nước không tạo bộ ba và không kích hoạt quân đặc biệt không mất lượt.</p>
+            <WarlordsFormations/>
+            <p class="board-help">Bom 3×3 bị giới hạn theo mép bàn. Quân đặc biệt được giữ lại ở đợt tạo ra nó; từ đợt liên hoàn tiếp theo có thể bị kích hoạt. Cả hai bên đều có thể dùng quân đặc biệt trên bàn chung. Liên hoàn tăng sát thương kiếm thêm 25% mỗi đợt, tối đa 75%.</p>
             <p class="board-help">Bàn phím: ← ↑ ↓ → di chuyển, Enter / Space chọn ô, Esc bỏ chọn. Có thể dùng nút Gợi ý một nước khi đến lượt bạn.</p>
             <p class="board-help">Mỗi lượt có 45 giây. Quá giờ mất 12 HP; bỏ ba lượt liên tiếp sẽ thua. Từ lượt 40 có hao quân xuyên khiên.<strong v-if="me?.missedTurns"> Bạn đã bỏ {{ me.missedTurns }}/3 lượt liên tiếp.</strong></p>
+            <details class="battle-history"><summary>Bối cảnh Hoa Lư và ngọn cờ</summary><WarlordsHistory/></details>
             <section class="war-panel battle-log"><span class="war-eyebrow">TIN TỪ CHIẾN TRƯỜNG</span><h2>Diễn biến</h2><ol v-if="log.length"><li v-for="(item,index) in log.slice(0,8)" :key="index"><strong>{{ item.actor }}</strong><span>{{ item.text }}</span></li></ol><p v-else class="war-muted">Đội quân đang chờ nước đi đầu tiên.</p></section>
             <p v-if="state.notice&&state.phase==='BATTLE'" class="war-notice">{{ state.notice }}</p>
             <section v-if="confirmRetreat&&state.phase==='BATTLE'" class="retreat-confirm" aria-label="Xác nhận rời trận">
@@ -473,4 +495,23 @@ onUnmounted(()=>{disposed=true;generation++;motion.cancel();queue.length=0;windo
  .turn-clock small{font-size:.45rem}
 }
 @media(prefers-reduced-motion:reduce){.turn-clock-track>span{transition:none}.attack-flight,.projectile,.damage-pop{animation:none}}
+.combat-board-panel{position:relative}
+.formation-count{display:inline-block;margin-left:7px;padding:2px 4px;border:1px solid #ba995950;border-radius:4px;font-size:.48rem;font-weight:500;color:#f1d38e;letter-spacing:0;text-transform:none}
+.combat-tile.special-tile{border-color:#d1af6f;box-shadow:inset 0 0 13px #f7dc7626,0 2px 2px #0005}
+.combat-tile.special-created{animation:formation-forge .4s ease-out;z-index:4}
+.combat-tile.special-activating{z-index:5;box-shadow:0 0 18px #fbe1a899}
+.combat-tile.special-activating::before,.combat-tile.special-activating::after{position:absolute;pointer-events:none;z-index:5;content:'';opacity:0}
+.combat-tile.special-activating.special-1::after,.combat-tile.special-activating.special-4::after{left:-800%;top:calc(50% - 3px);width:1700%;height:6px;background:linear-gradient(0deg,#edb457,#fff4d2,#edb457);box-shadow:0 0 12px #ffd98f;animation:formation-beam .36s ease-out}
+.combat-tile.special-activating.special-2::before,.combat-tile.special-activating.special-4::before{top:-800%;left:calc(50% - 3px);height:1700%;width:6px;background:linear-gradient(90deg,#89bfd1,#e7faff,#89bfd1);box-shadow:0 0 12px #91dcff;animation:formation-beam .36s ease-out}
+.combat-tile.special-activating.special-3::after{left:calc(-100% - 5px);top:calc(-100% - 5px);width:calc(300% + 10px);height:calc(300% + 10px);border:3px solid #ffe9a4;background:radial-gradient(circle,#ffe7a077,#e16a3c55,transparent 72%);border-radius:35%;box-shadow:0 0 20px #ec9c4a77;animation:formation-burst .36s ease-out}
+.chain-callout{position:absolute;left:50%;top:58px;transform:translateX(-50%);pointer-events:none;z-index:9;border:1px solid #e2c17b;border-radius:20px;background:#251e15e8;padding:7px 16px;color:#ffe9b0;font-family:Georgia,serif;font-size:1rem;white-space:nowrap;box-shadow:0 5px 20px #0008}
+.special-field-guide{padding:10px}
+.battle-details .formations-guide{padding:12px 0;border-top:1px solid #b49a5a33;border-bottom:1px solid #b49a5a33;margin:15px 0}
+.battle-history{margin:14px 0;font-size:.76rem;color:#dac496}.battle-history summary{cursor:pointer;padding:8px 0}
+@keyframes formation-forge{from{filter:brightness(2);box-shadow:0 0 20px #ffe5a9}to{filter:brightness(1)}}
+@keyframes formation-beam{0%{opacity:0}20%{opacity:1}100%{opacity:0}}
+@keyframes formation-burst{0%{opacity:.3;transform:scale(.3)}35%{opacity:1}100%{opacity:0;transform:scale(1)}}
+@media(max-width:700px) and (orientation:portrait){.special-field-guide{display:none}.formation-count{font-size:.43rem;margin-left:4px;padding:1px 3px}.chain-callout{top:52px;padding:5px 11px;font-size:.8rem}}
+@media(max-height:500px) and (orientation:landscape){.special-field-guide{display:none}}
+@media(prefers-reduced-motion:reduce){.combat-tile.special-created,.combat-tile.special-activating::before,.combat-tile.special-activating::after{animation:none}.combat-tile.special-activating{outline:3px solid #fff0b4;outline-offset:-3px}}
 </style>

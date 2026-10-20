@@ -12,7 +12,7 @@ Trong lobby chọn **Vào Sơn Hà** hoặc mở `/warlords`.
 
 ## Luật chiến đấu
 
-Hai bên luân phiên dùng chung một bàn 8×8. Đổi hai ô kề ngang/dọc; đổi không tạo bộ ba được hoàn tác và không tốn lượt. Một lần đổi hợp lệ hoặc dùng kỹ năng tiêu tốn một lượt. Không có lượt cộng thêm khi ghép bốn/năm ô trong bản đầu.
+Hai bên luân phiên dùng chung một bàn 8×8. Đổi hai ô kề ngang/dọc để ghép ít nhất ba tài nguyên cùng loại, hoặc đổi một quân đặc biệt để kích hoạt. Nước không tạo bộ ba và không kích hoạt quân đặc biệt được hoàn tác, không tốn lượt. Một lần đổi hợp lệ hoặc dùng kỹ năng tiêu tốn một lượt; ghép bốn/năm không cho thêm lượt.
 
 | Tài nguyên | Hiệu ứng mỗi ô được ghép |
 |---|---|
@@ -22,6 +22,21 @@ Hai bên luân phiên dùng chung một bàn 8×8. Đổi hai ô kề ngang/dọ
 | Khiên | +4, tối đa 80 |
 | Vàng | +2 chiến lợi phẩm; mỗi bên tối đa 100 vàng nhặt trong một trận chiến dịch |
 | Quân thư / kinh nghiệm | +3 XP chiến lợi phẩm; tối đa 180 XP nhặt trong trận chiến dịch |
+
+### Quân đặc biệt và nổ dây chuyền
+
+| Quân | Cách tạo | Khi kích hoạt |
+|---|---|---|
+| Hoành trận ↔ | Ghép 4 ô ngang | Xóa cả hàng ngang |
+| Tung trận ↕ | Ghép 4 ô dọc | Xóa cả cột dọc |
+| Hỏa trận ✹ | Hai bộ ghép giao nhau thành chữ T hoặc L | Nổ 9 ô trong vùng 3×3, cắt theo mép bàn |
+| Trận chữ thập ✣ | Ghép từ 5 ô thẳng hàng | Xóa cả hàng ngang và cột dọc |
+
+Quân đặc biệt giữ loại tài nguyên gốc; vẫn ghép được với các ô thường cùng loại. Mỗi nhóm ghép liền nhau tạo tối đa một quân, ưu tiên chữ thập rồi bom rồi hàng/cột. Vị trí tạo ưu tiên ô đích của nước đổi, sau đó ô nguồn, rồi ô thường đầu tiên trong nhóm. Ô được giữ để tạo quân chưa cho tài nguyên cho tới khi bị xóa ở đợt sau.
+
+Đổi quân đặc biệt với một ô kề luôn hợp lệ, kể cả không có bộ ba; cả hai ô đổi bị tiêu thụ và vụ nổ xuất phát tại vị trí sau đổi. Ghép trúng quân đặc biệt hoặc để vụ nổ chạm nó cũng kích hoạt được. Mỗi quân kích hoạt một lần và mỗi ô chỉ cho tài nguyên một lần trong một đợt, dù các vùng nổ giao nhau. Quân vừa tạo được bảo vệ trong đợt tạo ra nó, nhưng có thể kích hoạt từ đợt liên hoàn tiếp theo của cùng nước đi. Bàn là dùng chung: đối thủ cũng có thể tận dụng quân bạn vừa tạo.
+
+Hoành trận, Tung trận, Hỏa trận và Trận chữ thập là cơ chế hư cấu cho game; tên gọi và hiệu ứng nổ không mô tả vũ khí thế kỷ X.
 
 Các bộ ba đồng thời và ô giao nhau được hợp nhất. Xóa, rơi và sinh mới có thể tạo liên hoàn. Sát thương kiếm ở các đợt tiếp theo tăng 25% mỗi đợt, tối đa hệ số 1,75. Tối đa 30 đợt liên hoàn; nếu còn match hoặc hết nước đi, server tạo lại bàn không có match sẵn và có nước hợp lệ. Hiệu ứng hồi máu/năng lượng/khiên được áp dụng trước sát thương trong cùng một đợt. Khi có bên hết HP, kết quả trận được xác nhận và không áp dụng phần thưởng các đợt sau đó.
 
@@ -43,6 +58,8 @@ Nguồn đối chiếu tên/bối cảnh:
 
 - [Bảo tàng Lịch sử quốc gia: Tầm nhìn chiến lược của Đinh Bộ Lĩnh](https://baotanglichsuquocgia.vn/vi/Articles/3096/14529/tam-nhin-chien-luoc-cua-djinh-bo-linh.html).
 - [Khâm định Việt sử thông giám cương mục — bản số hóa](https://vietnamvanhien.org/kdvstgcm.pdf), đoạn chép các sứ quân và căn cứ: Bình Kiều, Phong Châu, Hồi Hồ, Tam Đái, Đường Lâm, Đỗ Động, Siêu Loại, Tiên Du, Tế Giang, Tây Phù Liệt, Đằng Châu và Bố Hải Khẩu. Cách viết Lã/Lữ Đường có dị bản; giao diện dùng Lã Đường.
+
+Hub và hướng dẫn trong trận có bảng dấu mốc 965–967, việc lập quốc hiệu Đại Cồ Việt và chọn Hoa Lư làm kinh đô năm 968, cùng địa thế núi/sông của Hoa Lư. Hình ảnh cờ lau được giới thiệu là truyền thuyết. Nội dung tham khảo [Bảo tàng Lịch sử quốc gia](https://baotanglichsu.vn/vi/Articles/3096/14529/tam-nhin-chien-luoc-cua-djinh-bo-linh.html) và [Sở Văn hóa Ninh Bình](https://vhtt.ninhbinh.gov.vn/vi/di-san-van-hoa/dong-hoa-lu-174.html).
 
 ## Hồ sơ và phần thưởng
 
@@ -88,7 +105,7 @@ Hồ sơ lưu ở `profile:warlords:{playerId}` trong Redis, theo danh tính do 
 - Màn chiến đấu tự co bàn cờ theo chiều cao viewport, giữ HP và kỹ năng cùng màn hình ở cả chế độ dọc/ngang. Hướng dẫn, nhật ký và rút quân nằm trong hộp thoại “Hướng dẫn / Nhật ký”. Hoạt ảnh trượt đổi chỗ, xóa và rơi ô chạy tuần tự theo sự kiện SWAP/CLEAR/FALL từ máy chủ; khóa thao tác trong lúc xử lý và tôn trọng chế độ giảm chuyển động. Khi kết nối lại, giao diện lấy ngay bàn mới nhất. Có đạn/hiệu ứng sát thương và nút gợi ý một nước. Các SVG ô tài nguyên, tướng và bản đồ là mã tự tạo trong repo.
 - Bàn cờ hỗ trợ phím mũi tên để di chuyển, Enter/Space chọn hai ô kề nhau, Esc bỏ chọn; Tab chuyển sang điều khiển tiếp theo. Thanh lượt có thời gian còn lại trên 45 giây; mỗi kỹ năng hiện lý do bị khóa hoặc trạng thái sẵn sàng. Bảng tài nguyên trên desktop và hướng dẫn trên mobile giải thích hiệu ứng mỗi ô. Rời trận hoặc rút quân cần xác nhận trong giao diện; lúc nối lại mạng, bàn khóa thao tác đến khi nhận snapshot mới.
 
-Chưa có bang hội, giao dịch, cửa hàng tiền thật, gacha, xếp hạng riêng, âm thanh hay tài khoản lâu dài. Chưa có quân đặc biệt kiểu ghép bốn/năm hoặc di chuyển tự do trên bản đồ; người chơi chọn các chương đã mở trên lộ trình.
+Chưa có bang hội, giao dịch, cửa hàng tiền thật, gacha, xếp hạng riêng hoặc âm thanh. Chưa có di chuyển tự do trên bản đồ; người chơi chọn các chương đã mở trên lộ trình.
 
 ## Mã và kiểm tra
 
@@ -103,3 +120,5 @@ npm run build
 ```
 
 `WarlordsGameTest` kiểm tra sáu tài nguyên, HP/khiên, kỹ năng, lượt, lệnh cũ, kết quả, timeout/rời phòng và retry thưởng. `WarlordsProfileTest` kiểm tra giá nâng cấp, mở chương, nhận thưởng trùng, mất phản hồi sau commit và cập nhật đồng thời. `WarlordsSocketIntegrationTest` mở hai HTTP session và hai kết nối STOMP thật trên server test; Redis/Kafka được thay bằng test double để không chạm hạ tầng hoặc dữ liệu đang chạy.
+
+`CombatBoardSpecialTest` kiểm tra tạo bốn loại quân, kích hoạt không cần bộ ba, nổ dây chuyền, cắt biên, không cộng tài nguyên trùng, bảo vệ quân mới tạo, hoàn tác nước sai, bot chỉ đọc ô nhìn thấy và khôi phục đúng RNG từ cả bàn cũ lẫn bàn có quân đặc biệt. Snapshot bàn dùng giá trị `loại tài nguyên + 10 × loại quân đặc biệt` (loại đặc biệt 0–4); số hàng/cột vẫn là 8. Sự kiện `SPECIAL_ACTIVATED` giữ ảnh bàn trước khi xóa; `SPECIAL_CREATED` giữ ảnh bàn sau khi tạo để client phát hiệu ứng đúng thứ tự.

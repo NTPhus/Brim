@@ -12,6 +12,8 @@ import WarlordsCamp from '@/components/warlords/WarlordsCamp.vue'
 import WarlordsHeroes from '@/components/warlords/WarlordsHeroes.vue'
 import WarlordsAccount from '@/components/warlords/WarlordsAccount.vue'
 import WarlordPortrait from '@/components/warlords/WarlordPortrait.vue'
+import WarlordsFormations from '@/components/warlords/WarlordsFormations.vue'
+import WarlordsHistory from '@/components/warlords/WarlordsHistory.vue'
 import '@/game/warlords.css'
 const router=useRouter()
 const session=useGameSession()
@@ -120,7 +122,8 @@ async function selectHero(heroId:string){
       <div class="war-section-header"><h2>Bàn đấu đang mở <span class="room-count">{{ duelRooms.length }}</span></h2><button class="war-button secondary small" :disabled="refreshingRooms||busy" @click="refreshRooms">{{ refreshingRooms?'Đang tải…':'↻ Làm mới' }}</button></div>
       <p v-if="roomsError" class="war-error" role="status">{{ roomsError }}</p>
       <div class="duel-room-list" :aria-busy="refreshingRooms"><article v-for="room in duelRooms" :key="room.id" class="war-panel duel-room"><span class="room-emblem" aria-hidden="true">⚔</span><div><strong>{{ room.name }}</strong><span class="war-muted"><i/>{{ room.players.length }}/2 người · {{ room.status==='WAITING'?'Chờ đối thủ':'Đang chơi' }}</span></div><button class="war-button small" :disabled="busy" @click="join(room)">{{ room.status==='IN_PROGRESS'?'Vào lại':'Vào bàn' }}</button></article><div v-if="!duelRooms.length&&!roomsError" class="empty-duel war-panel"><span aria-hidden="true">⚑</span><div><strong>Thế trận đang chờ bạn</strong><p>Chưa có bàn đấu phù hợp. Tạo bàn mới và gửi link mời một người bạn.</p></div></div></div>
-      <details class="rules-panel war-panel"><summary>Cách chơi Sơn Hà</summary><p>Đổi hai ô kề nhau để ghép ít nhất 3 hình giống nhau. Kiếm gây sát thương; năng lượng dùng kỹ năng; tim hồi HP; khiên đỡ đòn; vàng và quân thư là chiến lợi phẩm nhận khi trận kết thúc. Mỗi lần đổi hợp lệ hoặc dùng kỹ năng tiêu tốn một lượt. Nước không tạo bộ ba không mất lượt.</p><p>Từ lượt 40, quân vừa hành động mất dần HP do hao quân. Mỗi lượt có 45 giây; quá giờ mất 12 HP và đổi lượt, bỏ ba lượt liên tiếp sẽ thua. Bàn PvP có bot là luyện tập, không thưởng vàng/XP.</p></details>
+      <details class="rules-panel war-panel"><summary>Cách chơi Sơn Hà · quân đặc biệt & liên hoàn</summary><p>Đổi hai ô kề nhau để ghép ít nhất 3 tài nguyên cùng loại. Kiếm gây sát thương; năng lượng dùng kỹ năng; tim hồi HP; khiên đỡ đòn; vàng và quân thư là chiến lợi phẩm nhận khi trận kết thúc. Ghép 4, 5 hoặc hình T/L tạo quân đặc biệt theo bảng dưới.</p><WarlordsFormations/><p>Mỗi lần đổi hợp lệ hoặc dùng kỹ năng tiêu tốn một lượt. Nước không tạo bộ ba và không kích hoạt quân đặc biệt không mất lượt. Các quân đặc biệt nằm trên bàn chung, cả hai bên đều có thể dùng; quân vừa tạo chỉ kích hoạt từ đợt liên hoàn tiếp theo hoặc khi được dùng ở lượt sau.</p><p>Từ lượt 40, quân vừa hành động mất dần HP do hao quân. Mỗi lượt có 45 giây; quá giờ mất 12 HP và đổi lượt, bỏ ba lượt liên tiếp sẽ thua. Bàn PvP có bot là luyện tập, không thưởng vàng/XP.</p></details>
+      <WarlordsHistory/>
       <p class="war-history-note">Chiến dịch hư cấu lấy cảm hứng từ nhân vật, địa danh thời 12 sứ quân. Thứ tự màn không phải niên biểu; các trận thao luyện không có nghĩa nhân vật ấy bị tiêu diệt. <a href="https://baotanglichsuquocgia.vn/vi/Articles/3096/14529/tam-nhin-chien-luoc-cua-djinh-bo-linh.html" target="_blank" rel="noopener noreferrer">Đọc bối cảnh tại Bảo tàng Lịch sử quốc gia ↗</a></p>
     </template>
   </div>

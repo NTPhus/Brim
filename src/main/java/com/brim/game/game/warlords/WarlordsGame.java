@@ -133,8 +133,12 @@ public final class WarlordsGame implements TurnBasedGame {
             output.add(new Event("SWAP",actor.id,"",List.of(new Cell(move.row(),move.column()),
                     new Cell(move.toRow(),move.toColumn())),resolution.swapped(),null));
             for(var wave:resolution.waves()) {
+                if(!wave.activated().isEmpty())output.add(new Event("SPECIAL_ACTIVATED",actor.id,
+                        specialDescription(wave.activated(),true),wave.activated().stream().map(CombatBoard.Special::cell).toList(),wave.before(),null));
                 Effects effect=applyWave(wave.counts(),wave.combo());
                 output.add(new Event("CLEAR",actor.id,describe(effect),wave.cells(),wave.cleared(),effect));
+                if(!wave.created().isEmpty())output.add(new Event("SPECIAL_CREATED",actor.id,
+                        specialDescription(wave.created(),false),wave.created().stream().map(CombatBoard.Special::cell).toList(),wave.cleared(),null));
                 output.add(new Event("FALL",actor.id,"",List.of(),wave.fallen(),null));
                 if(enemy.hp==0)break;
             }
@@ -202,6 +206,16 @@ public final class WarlordsGame implements TurnBasedGame {
         Effects effect=new Effects(damage,absorbed,healing,-skill.cost(),shield,0,0,0);
         output.add(new Event("SKILL",actor.id,skill.name()+": "+describe(effect),List.of(),board.snapshot(),effect));
         return true;
+    }
+    private String specialDescription(List<CombatBoard.Special> specials,boolean activated) {
+        String names=specials.stream().map(unit->switch(unit.kind()) {
+            case CombatBoard.ROW->"Hoành trận";
+            case CombatBoard.COLUMN->"Tung trận";
+            case CombatBoard.AREA->"Hỏa trận 3×3";
+            case CombatBoard.CROSS->"Trận chữ thập";
+            default->"quân đặc biệt";
+        }).distinct().collect(java.util.stream.Collectors.joining(" · "));
+        return (activated?"Kích hoạt ":"Tạo ")+names+".";
     }
     private String describe(Effects effect) {
         List<String> parts=new ArrayList<>();

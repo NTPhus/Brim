@@ -108,6 +108,21 @@ class WarlordsGameTest {
         assertTrue(game.makeMove("b",command(game,"SKILL","STRIKE",null)));
         assertEquals(12,game.getState().fighters().get(0).shield());assertEquals("a",game.getCurrentPlayerId());
     }
+    @Test void encodedLineBlastEmitsItsOriginAndAppliesAllSixResourceEffectsExactlyOnce() {
+        var game=game(true,store());set(game,0,"hp",100);
+        int[][] cells=new int[8][8];for(int r=0;r<8;r++)for(int c=0;c<8;c++)cells[r][c]=(r*2+c)%6+1;
+        cells[3][2]=CombatBoard.tile(cells[3][2],CombatBoard.ROW);
+        ReflectionTestUtils.setField(game,"board",CombatBoard.restore(new CombatBoard.Saved(cells,123456L)));
+        assertTrue(game.makeMove("a",command(game,"SWAP",null,null,3,2,3,3)));
+        var events=game.getState().events();
+        var activation=events.stream().filter(e->e.type().equals("SPECIAL_ACTIVATED")).findFirst().orElseThrow();
+        assertEquals(13,activation.board()[3][3]);assertEquals(1,activation.cells().size());
+        assertTrue(activation.text().contains("Hoành trận"));
+        var clear=events.stream().filter(e->e.type().equals("CLEAR")).findFirst().orElseThrow();
+        assertEquals(8,clear.cells().size());assertEquals(8,new HashSet<>(clear.cells()).size());
+        var effects=clear.effects();assertEquals(10,effects.damage());assertEquals(12,effects.energy());
+        assertEquals(3,effects.healing());assertEquals(4,effects.shield());assertEquals(2,effects.gold());assertEquals(3,effects.experience());
+    }
     @Test void impossibleSkillPreservesStateAndSwordVictorySettlesCampaignOnce() {
         var store=store();var game=game(false,store);start(game);
         assertFalse(game.makeMove("a",command(game,"SKILL","STRIKE",null)));

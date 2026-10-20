@@ -85,6 +85,10 @@ export interface TankWall {
   y: number
   width: number
   height: number
+  blocksMovement?: boolean
+  blocksProjectile?: boolean
+  blocksVision?: boolean
+  blocksBlast?: boolean
 }
 
 export interface TankInput {
@@ -95,7 +99,24 @@ export interface TankInput {
   shoot: boolean
 }
 
+export interface TankMission {
+  id: string
+  sector: number
+  sectorCount: number
+  x: number
+  y: number
+  radius: number
+  heldMs: number
+  requiredMs: number
+  secured: boolean
+  status: 'INCOMING' | 'APPROACH' | 'HOLDING' | 'CONTESTED' | 'SECURED'
+  rewardCredits: number
+  nextWaveMs: number
+}
+
 export interface TankGameState {
+  mission?: TankMission | null
+  warnings?: { id: number; x: number; y: number; radius: number; remainingMs: number }[]
   rulesVersion: string
   supplies: TacticalSupply[]
   contacts: TacticalContact[]
@@ -105,7 +126,7 @@ export interface TankGameState {
   wave: number
   enemiesRemaining: number
   nextWaveTicks: number
-  infantry: { id: string; x: number; y: number; health: number; cooldown: number }[]
+  infantry: { id: string; x: number; y: number; health: number; cooldown: number; kind?: 'RIFLE' | 'GRENADIER'; aimAngle?: number }[]
   explosions: { id: number; x: number; y: number; radius: number; expiresAt: number }[]
   serverTime?: number
   tanks: Record<string, TankTank>

@@ -1,7 +1,7 @@
 import { createId } from '@/utils/id'
 import Phaser from 'phaser'
 import { WorldEffects } from '@/game/WorldEffects'
-import { tankMap } from './maps'
+import { shellImpact, tankMap, tankOperation } from './maps'
 import type { TankGameState } from '@/types/gameState'
 
 const TANK_SIZE = 28
@@ -9,6 +9,9 @@ const TANK_COLORS = ['#2ecc71', '#3498db', '#9b59b6', '#e67e22', '#1abc9c', '#e7
 
 export class TankScene extends Phaser.Scene {
   private graphics!: Phaser.GameObjects.Graphics
+  private ground!: Phaser.GameObjects.Graphics
+  private objectiveLabel!: Phaser.GameObjects.Text
+  private battlefieldKey = ''
   private playerId: string
   private lastState: TankGameState | null = null
   private renderedPositions = new Map<string, { x: number; y: number; angle: number }>()
@@ -45,6 +48,8 @@ export class TankScene extends Phaser.Scene {
   create() {
     this.terrain = this.add.tileSprite(0, 0, 1, 1, 'tank-terrain').setOrigin(0).setDepth(-10).setTint(0x737e78)
     this.graphics = this.add.graphics().setDepth(5)
+    this.ground = this.add.graphics().setDepth(-8)
+    this.objectiveLabel = this.add.text(0, 0, '', { fontFamily: 'Segoe UI, sans-serif', fontSize: '15px', fontStyle: 'bold', color: '#f0d797', backgroundColor: '#15231fe8', padding: { x: 10, y: 6 } }).setOrigin(.5).setDepth(6).setVisible(false)
     this.input.addPointer(2)
     const aimPointer = (pointer: Phaser.Input.Pointer) => {
       if (pointer.wasTouch) {
@@ -70,7 +75,7 @@ export class TankScene extends Phaser.Scene {
       this.sprites.clear(); this.renderedPositions.clear(); this.previousHealth.clear()
       this.projectileSprites = []
       this.effects.clear();this.lastState=null;this.cameraReady=false;this.bulletOrigins=[];this.snapshotAt=0
-      this.mouseAim=null;this.touchAim=null;this.mouseShooting=false
+      this.mouseAim=null;this.touchAim=null;this.mouseShooting=false;this.battlefieldKey=''
     })
   }
 
@@ -102,6 +107,10 @@ export class TankScene extends Phaser.Scene {
       if (previous !== undefined && tank.health < previous) {
         this.effects.emit(tank.x,tank.y,tank.alive?0xffc078:0xff855b,tank.alive?28:65)
         if (id === this.playerId&&!this.motionPreference.matches) this.cameras.main.shake(80, .002)
+        if (id === this.playerId) {
+          const label = this.add.text(tank.x, tank.y - 50, `−${previous - tank.health}`, { fontSize: '18px', fontStyle: 'bold', color: '#ffb49b', stroke: '#14221b', strokeThickness: 4 }).setOrigin(.5).setDepth(9)
+          this.tweens.add({ targets: label, y: tank.y - (this.motionPreference.matches ? 50 : 95), alpha: 0, duration: 900, onComplete: () => label.destroy() })
+        }
         if (!tank.alive&&!this.motionPreference.matches) {
           const smoke = this.add.image(tank.x, tank.y, 'tank-smoke').setDepth(8).setScale(.45)
           this.tweens.add({ targets: smoke, scale: 1.3, alpha: 0, duration: 600, onComplete: () => smoke.destroy() })
@@ -111,6 +120,7 @@ export class TankScene extends Phaser.Scene {
       this.previousHealth.set(id, tank.health)
     }
     this.terrain?.setTint(tankMap(state.mapId).terrain)
+    if (this.ground) this.buildBattlefield(state)
     this.lastState = state
     this.cameras.main.setBounds(0, 0, state.mapWidth, state.mapHeight)
   }
@@ -155,6 +165,39 @@ export class TankScene extends Phaser.Scene {
     this.terrain.setPosition(view.x, view.y).setSize(view.width + 2, view.height + 2)
     this.terrain.tilePositionX = view.x
     this.terrain.tilePositionY = view.y
+  }
+
+  private buildBattlefield(state: TankGameState) {
+    const key = `${state.mapId}-${state.mapWidth}-${state.mapHeight}-${state.mode}`
+    if (key === this.battlefieldKey) return
+    this.battlefieldKey = key
+    const g = this.ground.clear(), w = state.mapWidth, h = state.mapHeight
+    if (state.mode !== 'ASSAULT') return
+    const road = state.mapId === 'CANYON' ? 0xd4b081 : ['WAREHOUSE', 'CROSSROADS'].includes(state.mapId) ? 0x39453f : 0xa69b75
+    // Broad roads and worn shoulders explain navigable corridors without adding collision.
+    const paths = state.mapId === 'CANYON'
+      ? [[.08,.83,.17,.82,.17,.72,.35,.72,.35,.27,.52,.27,.52,.77,.70,.77,.70,.22,.90,.22]]
+      : [[.04,.5,.96,.5],[.5,.04,.5,.96]]
+    for (const path of paths) {
+      for (const [thickness, alpha] of [[88,.18],[62,.48]] as const) {
+        g.lineStyle(thickness, road, alpha).beginPath().moveTo(path[0]*w,path[1]*h)
+        for(let i=2;i<path.length;i+=2)g.lineTo(path[i]*w,path[i+1]*h)
+        g.strokePath()
+      }
+    }
+    if (state.mapId === 'CROSSROADS') for (let n=1;n<20;n++) {
+      g.fillStyle(0xd3c99b,.35).fillRect(w*n/20-10,h*.5-2,20,4).fillRect(w*.5-2,h*n/20-10,4,20)
+    }
+    const seed = state.mapId.split('').reduce((n,c)=>n+c.charCodeAt(0),0)
+    for(let n=0;n<65;n++) {
+      const x=45+((n*197+seed*31)%Math.max(1,w-90)),y=45+((n*317+seed*53)%Math.max(1,h-90))
+      if(state.walls.some(wall=>x>wall.x-15&&x<wall.x+wall.width+15&&y>wall.y-15&&y<wall.y+wall.height+15))continue
+      if(n%4===0){g.fillStyle(0x283b2b,.17).fillEllipse(x,y,25+n%17,15+n%11);g.lineStyle(1,0xc2c1a0,.12).strokeEllipse(x,y,30+n%17,20+n%11)}
+      else {g.lineStyle(2,0x243326,.16).lineBetween(x,y,x+20,y+14);g.lineBetween(x+8,y-9,x+28,y+5)}
+    }
+    if (['WAREHOUSE','DEPOT'].includes(state.mapId)) for(let n=1;n<14;n++) {
+      g.lineStyle(2,0xd5c291,.18).lineBetween(w*.44,h*n/14,w*.56,h*n/14)
+    }
   }
 
   private drawWalls(state: TankGameState) {
@@ -244,21 +287,52 @@ export class TankScene extends Phaser.Scene {
   }
 
   private drawAssault(state: TankGameState) {
+    this.objectiveLabel?.setVisible(false)
     if (state.mode !== 'ASSAULT') return
     const g = this.graphics
+    const mission = state.mission
+    if (mission) {
+      const color = mission.secured ? 0x9cddad : mission.status === 'CONTESTED' ? 0xff9e78 : 0xe4c67a
+      const pulse = this.motionPreference.matches ? 1 : .85 + Math.sin(this.time.now / 450) * .15
+      g.fillStyle(color,.06).fillCircle(mission.x,mission.y,mission.radius)
+      g.lineStyle(2,color,.75*pulse).strokeCircle(mission.x,mission.y,mission.radius)
+      g.lineStyle(5,color,.85).beginPath().arc(mission.x,mission.y,mission.radius-7,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.min(1,mission.heldMs/mission.requiredMs),false).strokePath()
+      g.fillStyle(0x182a21,.9).fillRoundedRect(mission.x-18,mission.y-20,36,40,4)
+      g.lineStyle(2,color).lineBetween(mission.x-8,mission.y+12,mission.x-8,mission.y-12)
+      g.fillStyle(color).fillTriangle(mission.x-7,mission.y-12,mission.x+12,mission.y-6,mission.x-7,mission.y)
+      const name = tankOperation(state.mapId).sectors[mission.sector-1] ?? 'Mục tiêu'
+      this.objectiveLabel.setText(`${mission.secured?'✓':mission.sector}  ${name}`).setPosition(mission.x,mission.y-mission.radius-25).setVisible(true)
+      const me=state.tanks[this.playerId],view=this.cameras.main.worldView
+      if(me?.alive&&!view.contains(mission.x,mission.y)) {
+        const angle=Math.atan2(mission.y-me.y,mission.x-me.x),distance=Math.min(view.width,view.height)*.32
+        const x=me.x+Math.cos(angle)*distance,y=me.y+Math.sin(angle)*distance
+        const tip=Phaser.Math.RotateAround(new Phaser.Math.Vector2(x+12,y),x,y,angle)
+        const left=Phaser.Math.RotateAround(new Phaser.Math.Vector2(x-7,y-8),x,y,angle),right=Phaser.Math.RotateAround(new Phaser.Math.Vector2(x-7,y+8),x,y,angle)
+        g.fillStyle(color,.9).fillTriangle(tip.x,tip.y,left.x,left.y,right.x,right.y)
+      }
+    }
+    const elapsed=this.time.now-this.snapshotAt
+    for(const warning of state.warnings??[]) {
+      const remaining=Math.max(0,warning.remainingMs-elapsed),progress=1-remaining/1400
+      g.fillStyle(0xff8059,.1+progress*.16).fillCircle(warning.x,warning.y,warning.radius)
+      g.lineStyle(2,0xffb174,.9).strokeCircle(warning.x,warning.y,warning.radius)
+      g.lineStyle(3,0xffe6a2,.9).strokeCircle(warning.x,warning.y,Math.max(4,warning.radius*(1-progress)))
+      g.lineStyle(2,0xffc18e,.8).lineBetween(warning.x-9,warning.y-9,warning.x+9,warning.y+9).lineBetween(warning.x+9,warning.y-9,warning.x-9,warning.y+9)
+    }
     for (const unit of state.infantry ?? []) {
       const target = Object.values(state.tanks).filter(t => t.alive && !t.playerId.startsWith('bot-'))
         .sort((a, b) => Phaser.Math.Distance.Between(a.x, a.y, unit.x, unit.y) - Phaser.Math.Distance.Between(b.x, b.y, unit.x, unit.y))[0]
-      const angle = target ? Math.atan2(target.y - unit.y, target.x - unit.x) : 0
+      const angle = unit.aimAngle ?? (target ? Math.atan2(target.y - unit.y, target.x - unit.x) : 0)
       const stride = this.motionPreference.matches ? 0 : Math.sin(this.time.now / 100 + unit.x) * 3
       g.fillStyle(0x090e0c, .35).fillEllipse(unit.x + 3, unit.y + 5, 19, 13)
       g.lineStyle(4, 0x29362c).lineBetween(unit.x - 4, unit.y + 5, unit.x - 4 + stride, unit.y + 10)
       g.lineBetween(unit.x + 4, unit.y + 5, unit.x + 4 - stride, unit.y + 10)
-      g.fillStyle(0xa66545).fillRoundedRect(unit.x - 7, unit.y - 4, 14, 13, 3)
+      g.fillStyle(unit.kind==='GRENADIER'?0xd29b48:0xa66545).fillRoundedRect(unit.x - 7, unit.y - 4, 14, 13, 3)
       g.fillStyle(0xe8c29a).fillCircle(unit.x, unit.y - 5, 5)
       g.fillStyle(0x586746).fillEllipse(unit.x, unit.y - 8, 13, 7)
       g.lineStyle(3, 0x222c29).lineBetween(unit.x, unit.y, unit.x + Math.cos(angle) * 17, unit.y + Math.sin(angle) * 17)
-      if (unit.cooldown >= 33 && target && Phaser.Math.Distance.Between(unit.x, unit.y, target.x, target.y) < 310)
+      if(unit.kind==='GRENADIER')g.lineStyle(2,0xffd588).strokeCircle(unit.x,unit.y-22,4)
+      if (unit.kind !== 'GRENADIER' && unit.cooldown >= 33 && target && Phaser.Math.Distance.Between(unit.x, unit.y, target.x, target.y) < 310)
         g.lineStyle(1, 0xffcf72, .5).lineBetween(unit.x, unit.y, target.x, target.y)
       g.fillStyle(0xef8063).fillRect(unit.x - 9, unit.y - 17, 18 * Math.min(1, unit.health / 60), 3)
     }
@@ -292,7 +366,14 @@ export class TankScene extends Phaser.Scene {
     const distance = Math.min(range, Phaser.Math.Distance.Between(tank.x, tank.y, aim.targetX, aim.targetY))
     const angle = Math.atan2(aim.targetY - tank.y, aim.targetX - tank.x)
     const x = tank.x + Math.cos(angle) * distance, y = tank.y + Math.sin(angle) * distance
-    g.lineStyle(1, 0xd8d9b6, .7).lineBetween(x - 5, y, x + 5, y).lineBetween(x, y - 5, x, y + 5)
+    const impact=shellImpact(tank.x,tank.y,x,y,state.walls)
+    const danger=Phaser.Math.Distance.Between(tank.x,tank.y,impact.x,impact.y)<120
+    const color=danger?0xff9b75:impact.blocked?0xe7c16f:0xd8d9b6
+    g.lineStyle(1,color,.32).lineBetween(tank.x,tank.y,impact.x,impact.y)
+    g.lineStyle(1,color,.28).strokeCircle(impact.x,impact.y,tank.tacticalView?.weapon.state==='READY'?120:18)
+    g.lineStyle(2,color,.9).lineBetween(impact.x-7,impact.y,impact.x+7,impact.y).lineBetween(impact.x,impact.y-7,impact.x,impact.y+7)
+    const barrelX=tank.x+Math.cos(tank.turretAngle)*65,barrelY=tank.y+Math.sin(tank.turretAngle)*65
+    g.lineStyle(3,0xe4c67a,.65).lineBetween(tank.x+Math.cos(tank.turretAngle)*35,tank.y+Math.sin(tank.turretAngle)*35,barrelX,barrelY)
   }
 
   private drawHealthPacks(state: TankGameState) {

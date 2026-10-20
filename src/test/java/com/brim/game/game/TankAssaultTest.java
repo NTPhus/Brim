@@ -91,9 +91,10 @@ class TankAssaultTest {
         for(int n=0;n<60;n++)g.update();assertEquals(1,g.getWave());assertEquals(0,g.getSupplies().get(0).getQuantity());
         for(int wave=1;wave<=3;wave++){
             g.getInfantry().clear();g.getTanks().values().removeIf(t->t.getPlayerId().startsWith("bot-"));
-            for(int n=0;n<100;n++)g.update();
+            var objective=g.getGameState("human").getMission();me.setX(objective.x());me.setY(objective.y());
+            for(int n=0;n<260;n++)g.update();
         }
-        assertEquals(4,g.getWave());assertEquals(TankMaps.Layout.WAREHOUSE,g.getMapLayout());assertEquals(600,me.getHealth());assertEquals(225,me.getCredits());
+        assertEquals(4,g.getWave());assertEquals(TankMaps.Layout.WAREHOUSE,g.getMapLayout());assertEquals(600,me.getHealth());assertEquals(345,me.getCredits());
     }
     @Test void classicKeepsItsDirectFireAndItemBehavior(){
         var g=new TankGame("classic",1800,1200,5,15,0);g.getWalls().clear();var me=add(g,"human",100,100);g.setState(TankGame.GameState.IN_PROGRESS);

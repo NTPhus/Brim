@@ -29,6 +29,19 @@ export interface WarlordsState {
 }
 export interface WarlordsHub { profile: WarlordsProfile; chapters: WarlordsChapter[]; skills: WarlordsSkill[]; heroes: WarlordsHero[]; savedCampaign:{chapter:number;phase:'BATTLE'|'RESULT';updatedAt:number}|null }
 export const resourceNames = ['', 'Kiếm', 'Năng lượng', 'Hồi máu', 'Khiên', 'Vàng', 'Kinh nghiệm']
+export const tileResource = (tile: number) => tile > 0 ? tile % 10 : 0
+export const tileSpecial = (tile: number) => tile > 0 ? Math.floor(tile / 10) : 0
+export const specialFormations = [
+  { kind: 1, name: 'Hoành trận', symbol: '↔', recipe: 'Ghép 4 ô theo hàng ngang', effect: 'Quét toàn bộ hàng ngang' },
+  { kind: 2, name: 'Tung trận', symbol: '↕', recipe: 'Ghép 4 ô theo hàng dọc', effect: 'Quét toàn bộ cột dọc' },
+  { kind: 3, name: 'Hỏa trận', symbol: '✹', recipe: 'Ghép hình chữ T hoặc L', effect: 'Nổ 9 ô trong vùng 3×3' },
+  { kind: 4, name: 'Trận chữ thập', symbol: '✣', recipe: 'Ghép từ 5 ô thẳng hàng', effect: 'Quét cả hàng ngang và cột dọc' }
+] as const
+export function tileName(tile: number) {
+  const resource = resourceNames[tileResource(tile)] || 'Ô trống'
+  const formation = specialFormations.find(item => item.kind === tileSpecial(tile))
+  return formation ? `${resource} · ${formation.name}, ${formation.effect.toLowerCase()}` : resource
+}
 export const heroLevel = (profile: WarlordsProfile) => Math.min(20, 1 + Math.floor(profile.experience / 100))
 export const upgrades = [
   { id: 'WEAPON', field: 'weapon', name: 'Rèn binh khí', icon: '⚔', description: '+1 sát thương cho mỗi ô kiếm', base: 60 },

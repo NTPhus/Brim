@@ -43,6 +43,17 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
     private final List<Explosion> explosions = new ArrayList<>();
     private int wave;
     private int waveDelay = 60;
+    private final List<GroundWarning> groundWarnings = new ArrayList<>();
+    private final List<Position> sectorPositions = new ArrayList<>();
+    private double sectorHeldSeconds;
+    private boolean sectorSecured;
+    private static final double SECTOR_HOLD_SECONDS = 8;
+    private static final int SECTOR_RADIUS = 115;
+    private long warningSequence;
+    public record MissionView(String id, int sector, int sectorCount, double x, double y, int radius,
+            long heldMs, long requiredMs, boolean secured, String status, int rewardCredits, long nextWaveMs) {}
+    public record GroundWarning(long id, double x, double y, int radius, double detonatesAt) {}
+    public record WarningView(long id, double x, double y, int radius, long remainingMs) {}
     private long explosionSequence;
     private int[] navigation;
     private static final int NAV_CELL = 40;
@@ -79,7 +90,7 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         this.tickRateMs = tickRateMs;
         generateWalls();
         spawnHealthPacks();
-        if (this.mode == Mode.ASSAULT) createSupplies();
+        if (this.mode == Mode.ASSAULT) { createSupplies(); createSectors(); }
     }
 
     public synchronized void addPlayer(Player player) {
@@ -141,6 +152,7 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         updateTanks();
         updateBullets();
         checkCollisions();
+        if (mode == Mode.ASSAULT) updateSector();
         checkHealthPacks();
         spawnHealthPacks();
         updateObservations();
@@ -543,21 +555,25 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         boolean humansAlive = tanks.values().stream().anyMatch(t -> t.alive && !t.playerId.startsWith("bot-"));
         if (!humansAlive) return;
         boolean clear = infantry.isEmpty() && tanks.values().stream().noneMatch(t -> t.alive && t.playerId.startsWith("bot-"));
-        if (clear && --waveDelay <= 0) {
+        updateGroundWarnings();
+        if (clear && (wave == 0 || sectorSecured) && --waveDelay <= 0) {
             wave++;
+            sectorHeldSeconds = 0; sectorSecured = false;
             tanks.values().removeIf(t -> t.playerId.startsWith("bot-"));
             if (wave > 1) tanks.values().forEach(t -> { t.credits += 75; });
             if (wave > 1 && (wave - 1) % 3 == 0) {
                 mapLayout = TankMaps.Layout.values()[(mapLayout.ordinal() + 1) % TankMaps.Layout.values().length];
-                walls.clear(); generateWalls(); bullets.clear(); healthPacks.clear(); explosions.clear(); navigation = null;
-                createSupplies();
+                walls.clear(); generateWalls(); bullets.clear(); healthPacks.clear(); explosions.clear(); groundWarnings.clear(); navigation = null;
+                observations.clear(); createSupplies(); createSectors();
                 tanks.values().forEach(t -> { Position p = generateSpawnPosition(); t.x = p.x; t.y = p.y; });
                 spawnHealthPacks();
             }
             int count = Math.min(30, 5 + wave * 2);
             for (int n = 0; n < count; n++) {
                 Position p = enemySpawn();
-                infantry.add(new Infantry("inf-" + wave + "-" + n, p.x, p.y, 45 + Math.min(45, wave * 3), 30 + n % 20));
+                Infantry unit = new Infantry("inf-" + wave + "-" + n, p.x, p.y, 45 + Math.min(45, wave * 3), 30 + n % 20);
+                unit.kind = n % 4 == 3 ? "GRENADIER" : "RIFLE";
+                infantry.add(unit);
             }
             for (int n = 0; n < Math.min(5, 1 + wave / 2); n++) {
                 Position p = enemySpawn();
@@ -571,12 +587,15 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         if (navigation == null || botDecisionTick % 10 == 0) updateNavigation();
         for (Infantry unit : infantry) {
             Tank target = tanks.values().stream().filter(t -> t.alive && !t.playerId.startsWith("bot-"))
+                    .filter(t -> Math.hypot(t.x - unit.x, t.y - unit.y) <= balance.sightRange()
+                            && TacticalGeometry.clear(walls, unit.x, unit.y, t.x, t.y, BattleObstacle::blocksVision))
                     .min(Comparator.comparingDouble(t -> Math.hypot(t.x - unit.x, t.y - unit.y))).orElse(null);
-            if (target == null || !sees(target, unit.x, unit.y)) continue;
-            double distance = Math.hypot(target.x - unit.x, target.y - unit.y);
-            double angle = Math.atan2(target.y - unit.y, target.x - unit.x);
-            boolean blocked = !lineClear(unit.x, unit.y, target.x, target.y, 12);
-            if (distance > 150 || blocked) {
+            Position sector = activeSector();
+            double targetX = target == null ? sector.x : target.x, targetY = target == null ? sector.y : target.y;
+            double distance = Math.hypot(targetX - unit.x, targetY - unit.y);
+            double angle = Math.atan2(targetY - unit.y, targetX - unit.x);
+            boolean blocked = !lineClear(unit.x, unit.y, targetX, targetY, 12);
+            if (distance > (target == null ? 35 : 150) || blocked) {
                 if (blocked) {
                     int cols = (mapWidth + NAV_CELL - 1) / NAV_CELL;
                     int cell = Math.min(navigation.length - 1, (int) unit.y / NAV_CELL * cols + (int) unit.x / NAV_CELL);
@@ -593,14 +612,95 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
                     else if (canMove(unit.x, ny, 9)) unit.y = ny;
                 }
             }
-            if (--unit.cooldown <= 0 && distance < 310) {
+            unit.aimAngle = angle;
+            if (--unit.cooldown <= 0 && target != null && distance < 310) {
                 boolean cover = !lineClear(unit.x, unit.y, target.x, target.y, 2);
                 if (!cover) {
-                    target.takeDamage(4 + Math.min(4, wave / 3));
-                    if (!target.alive) target.diedAt = System.currentTimeMillis();
+                    if ("GRENADIER".equals(unit.kind)) {
+                        groundWarnings.add(new GroundWarning(++warningSequence, target.x, target.y, 72, simulationTime + 1.4));
+                    } else {
+                        target.takeDamage(4 + Math.min(4, wave / 3));
+                        if (!target.alive) target.diedAt = System.currentTimeMillis();
+                    }
                 }
-                unit.cooldown = 35;
+                unit.cooldown = "GRENADIER".equals(unit.kind) ? 100 : 35;
             }
+        }
+    }
+
+    /** Mission coordinates are public; capture eligibility and rewards stay authoritative. */
+    private void createSectors() {
+        sectorPositions.clear();
+        for (double[] preferred : new double[][]{{.5, .23}, {.76, .57}, {.27, .76}}) {
+            Position best = null; double nearest = Double.POSITIVE_INFINITY;
+            for (int y = 60; y < mapHeight - 40; y += 30) for (int x = 60; x < mapWidth - 40; x += 30) {
+                final int px = x, py = y;
+                if (walls.stream().anyMatch(w -> w.blocksMovement && w.intersects(px, py, 35))) continue;
+                double distance = Math.hypot(x - mapWidth * preferred[0], y - mapHeight * preferred[1]);
+                if (distance < nearest) { nearest = distance; best = new Position(x, y); }
+            }
+            sectorPositions.add(best == null ? generateSpawnPosition() : best);
+        }
+    }
+
+    private Position activeSector() { return sectorPositions.get(Math.max(0, wave - 1) % 3); }
+
+    private boolean inSector(double x, double y) {
+        Position point = activeSector();
+        return Math.hypot(x - point.x, y - point.y) <= SECTOR_RADIUS
+                && TacticalGeometry.clear(walls, x, y, point.x, point.y, BattleObstacle::blocksMovement);
+    }
+
+    private boolean sectorContested() {
+        return tanks.values().stream().anyMatch(t -> t.alive && t.playerId.startsWith("bot-") && inSector(t.x, t.y))
+                || infantry.stream().anyMatch(i -> i.health > 0 && inSector(i.x, i.y));
+    }
+
+    private void updateSector() {
+        if (wave == 0 || sectorSecured) return;
+        boolean occupied = tanks.values().stream().anyMatch(t -> t.alive && !t.playerId.startsWith("bot-") && inSector(t.x, t.y));
+        if (!occupied || sectorContested()) return;
+        sectorHeldSeconds = Math.min(SECTOR_HOLD_SECONDS, sectorHeldSeconds + stepSeconds());
+        if (sectorHeldSeconds < SECTOR_HOLD_SECONDS - 1e-8) return;
+        sectorSecured = true;
+        Position point = activeSector();
+        String id = "sector-" + wave;
+        // One cache per sector, never on a retry, reconnect, or reinforcement tick.
+        supplies.add(new SupplyCrate(id + "-shells", point.x, point.y, SupplyKind.SHELLS, 6));
+        supplies.add(new SupplyCrate(id + "-fuel", point.x + 25, point.y, SupplyKind.FUEL, 400));
+        supplies.add(new SupplyCrate(id + "-repair", point.x - 25, point.y, SupplyKind.REPAIR, 1));
+        tanks.values().stream().filter(t -> t.alive && !t.playerId.startsWith("bot-")).forEach(t -> { t.credits += 40; t.score += 40; });
+    }
+
+    private MissionView missionView(Tank viewer, boolean admin) {
+        if (mode != Mode.ASSAULT) return null;
+        Position point = activeSector();
+        String status = sectorSecured ? "SECURED" : wave == 0 ? "INCOMING" : "APPROACH";
+        if (!sectorSecured && wave > 0 && (admin || viewer != null && viewer.alive && inSector(viewer.x, viewer.y))) {
+            // A remote HUD must not reveal hidden enemy occupancy of an objective.
+            boolean visibleContest = admin ? sectorContested() :
+                    tanks.values().stream().anyMatch(t -> t.alive && t.playerId.startsWith("bot-") && inSector(t.x, t.y) && sees(viewer, t.x, t.y))
+                    || infantry.stream().anyMatch(i -> i.health > 0 && inSector(i.x, i.y) && sees(viewer, i.x, i.y));
+            status = visibleContest ? "CONTESTED" : "HOLDING";
+        }
+        boolean clear = infantry.isEmpty() && tanks.values().stream().noneMatch(t -> t.alive && t.playerId.startsWith("bot-"));
+        return new MissionView("sector-" + Math.max(1, wave), Math.max(0, wave - 1) % 3 + 1, 3, point.x, point.y, SECTOR_RADIUS,
+                Math.round(sectorHeldSeconds * 1000), (long) (SECTOR_HOLD_SECONDS * 1000), sectorSecured, status, 40,
+                (wave == 0 || clear && sectorSecured) ? Math.max(0, Math.round(waveDelay * stepSeconds() * 1000)) : -1);
+    }
+
+    private void updateGroundWarnings() {
+        Iterator<GroundWarning> iterator = groundWarnings.iterator();
+        while (iterator.hasNext()) {
+            GroundWarning warning = iterator.next();
+            if (simulationTime + 1e-8 < warning.detonatesAt) continue;
+            explosions.add(new Explosion(++explosionSequence, warning.x, warning.y, warning.radius, System.currentTimeMillis() + 650));
+            for (Tank target : tanks.values()) if (target.alive && !target.playerId.startsWith("bot-")
+                    && TacticalGeometry.clear(walls, warning.x, warning.y, target.x, target.y, BattleObstacle::blocksBlast)) {
+                int damage = TacticalDamage.radial(Math.hypot(target.x - warning.x, target.y - warning.y), warning.radius, 52);
+                if (damage > 0) { target.takeDamage(damage); if (!target.alive) target.diedAt = System.currentTimeMillis(); }
+            }
+            iterator.remove();
         }
     }
 
@@ -622,10 +722,9 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
             blocked[i] = x >= mapWidth - 12 || y >= mapHeight - 12 || walls.stream().anyMatch(w -> w.intersects(x, y, 12));
         }
         ArrayDeque<Integer> queue = new ArrayDeque<>();
-        for (Tank tank : tanks.values()) if (tank.alive && !tank.playerId.startsWith("bot-")) {
-            int cell = (int) tank.y / NAV_CELL * cols + (int) tank.x / NAV_CELL;
-            navigation[cell] = 0; queue.add(cell);
-        }
+        Position objective = activeSector();
+        int goal = Math.min(navigation.length - 1, (int) objective.y / NAV_CELL * cols + (int) objective.x / NAV_CELL);
+        navigation[goal] = 0; queue.add(goal);
         while (!queue.isEmpty()) {
             int cell = queue.removeFirst();
             for (int neighbor : new int[]{cell - cols, cell + cols, cell % cols > 0 ? cell - 1 : -1, cell % cols < cols - 1 ? cell + 1 : -1}) {
@@ -646,12 +745,17 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         return p;
     }
 
-    @Data @lombok.AllArgsConstructor
+    @Data
     public static class Infantry {
         private final String id;
         private double x, y;
         private int health;
         private int cooldown;
+        private String kind = "RIFLE";
+        private double aimAngle;
+        public Infantry(String id, double x, double y, int health, int cooldown) {
+            this.id=id; this.x=x; this.y=y; this.health=health; this.cooldown=cooldown;
+        }
     }
     public record Explosion(long id, double x, double y, int radius, long expiresAt) {}
 
@@ -754,10 +858,12 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
                 mode == Mode.ASSAULT && !admin ? -1 : (int) infantry.stream().filter(i -> i.health > 0).count()
                     + (int) tanks.values().stream().filter(t -> t.alive && t.playerId.startsWith("bot-")).count(),
                 waveDelay, infantry.stream().filter(i -> admin || area.contains(i.x, i.y) && (mode != Mode.ASSAULT || sees(viewer, i.x, i.y)))
-                    .map(i -> new Infantry(i.id, i.x, i.y, i.health, i.cooldown)).toList(),
+                    .map(i -> { Infantry copy = new Infantry(i.id, i.x, i.y, i.health, i.cooldown); copy.kind=i.kind; copy.aimAngle=i.aimAngle; return copy; }).toList(),
                 explosions.stream().filter(e -> admin || sees(viewer, e.x, e.y)).toList(),
                 contacts.stream().filter(ContactView::current).map(c -> new EnemyMarker(c.x, c.y)).toList(),
-                supplyViews, mode == Mode.ASSAULT ? balance.version() : "classic", List.copyOf(contacts));
+                supplyViews, mode == Mode.ASSAULT ? balance.version() : "classic", List.copyOf(contacts), missionView(viewer, admin),
+                groundWarnings.stream().filter(w -> admin || sees(viewer, w.x, w.y))
+                    .map(w -> new WarningView(w.id, w.x, w.y, w.radius, Math.max(0, Math.round((w.detonatesAt - simulationTime) * 1000)))).toList());
     }
     public record EnemyMarker(double x, double y) {}
 
@@ -907,6 +1013,8 @@ public class TankGame implements com.brim.game.runtime.GameSimulation<TankGame.T
         private final List<SupplyView> supplies;
         private final String rulesVersion;
         private final List<ContactView> contacts;
+        private final MissionView mission;
+        private final List<WarningView> warnings;
         private final long serverTime = System.currentTimeMillis();
     }
 }

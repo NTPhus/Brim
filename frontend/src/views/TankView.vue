@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import Phaser from 'phaser'
 import { useRoute, useRouter } from 'vue-router'
 import { tacticalMessages } from '@/types/tactical'
-import { tankMap } from '@/game/tank/maps'
+import { tankMap, tankOperation } from '@/game/tank/maps'
 import { TankScene } from '@/game/tank/TankScene'
 import GameMinimap from '@/components/GameMinimap.vue'
 import GlobalLeaderboard from '@/components/GlobalLeaderboard.vue'
@@ -44,6 +44,21 @@ const healthPercent = computed(() => Math.max(0, Math.min(100, health.value / ma
 const alive = computed(() => myTank.value?.alive ?? true)
 const isHost = computed(() => roomInfo.value?.hostId === myPlayerId)
 const mapName = computed(() => tankMap(gameState.value?.mapId ?? String(roomInfo.value?.settings.customSettings?.mapId ?? 'ARENA')).name)
+const operation = computed(() => tankOperation(gameState.value?.mapId ?? String(roomInfo.value?.settings.customSettings?.mapId ?? 'ARENA')))
+const mission = computed(() => gameState.value?.mission)
+const objectiveName = computed(() => operation.value.sectors[(mission.value?.sector ?? 1) - 1] ?? 'Khu vực nhiệm vụ')
+const objectiveProgress = computed(() => mission.value ? Math.min(100, mission.value.heldMs / mission.value.requiredMs * 100) : 0)
+const objectiveDistance = computed(() => mission.value && myTank.value ? Math.round(Math.hypot(myTank.value.x-mission.value.x,myTank.value.y-mission.value.y)) : null)
+const objectiveStatus = computed(() => {
+  const current = mission.value
+  if (!current) return 'Trinh sát và giữ vật tư'
+  if (current.nextWaveMs >= 0) return `Viện binh sau ${(current.nextWaveMs / 1000).toFixed(1)}s`
+  if (current.secured) return 'Đã giữ điểm · đẩy lùi lực lượng còn lại'
+  if (current.status === 'CONTESTED') return 'Đang tranh chấp · đẩy địch khỏi vòng cờ'
+  if (current.status === 'HOLDING') return `Đang giữ điểm · ${(current.heldMs / 1000).toFixed(1)} / ${current.requiredMs / 1000}s`
+  return 'Tiến vào vòng cờ và giữ 8 giây'
+})
+const nearbyWarning = computed(() => !!myTank.value && (gameState.value?.warnings ?? []).some(warning => Math.hypot(warning.x-myTank.value!.x,warning.y-myTank.value!.y) <= warning.radius + 25))
 const networkState = computed(() => !stomp.connected.value ? 'offline' : lastSnapshotAt.value && clock.value - lastSnapshotAt.value > 1500 ? 'slow' : 'online')
 const networkStatus = computed(() => isConnecting.value ? 'Đang kết nối' : networkState.value === 'offline' ? 'Đang kết nối lại' : networkState.value === 'slow' ? 'Đang chờ cập nhật' : 'Kết nối ổn định')
 const canControl = computed(() => stomp.connected.value && !awaitingFreshSnapshot.value && !!myTank.value && alive.value && gameState.value?.state === 'IN_PROGRESS' && !isGameOver.value && !isRestarting.value)
@@ -279,8 +294,8 @@ onUnmounted(() => {
       <nav class="header-actions" aria-label="Thao tác trận đấu"><button class="quiet-button" @click="handleGoToLobby">← Về sảnh</button><button class="quiet-button fullscreen-button" @click="toggleFullscreen">⛶ Toàn màn hình</button><label class="color-picker"><input v-model="selectedColor" type="color" aria-label="Chọn màu xe tăng" @change="updateColor" /><span>Màu xe</span></label></nav>
     </header>
     <section class="mission-banner" aria-label="Tình hình chiến trường">
-      <div class="mission-title"><span class="eyebrow">{{ assault ? 'HÀNH QUÂN / SINH TỒN' : 'ĐỐI KHÁNG / TỰ DO' }}</span><strong>{{ mapName }}</strong></div>
-      <div v-if="assault" class="wave-summary"><strong>ĐỢT <span>{{ gameState?.wave || '—' }}</span></strong><p>{{ gameState && gameState.wave === 0 ? 'Đang chuẩn bị đợt đầu tiên' : 'Quan sát, giữ vật tư và bảo toàn đội xe' }}</p></div>
+      <div class="mission-title"><span class="eyebrow">{{ assault ? `GIẢ LẬP / ${operation.context.label}` : 'ĐỐI KHÁNG / TỰ DO' }}</span><strong>{{ assault ? operation.title : mapName }}</strong></div>
+      <div v-if="assault" class="wave-summary"><strong>ĐỢT <span>{{ gameState?.wave || '—' }}</span></strong><p>{{ objectiveStatus }}</p></div>
       <div v-else class="wave-summary"><strong>{{ score }} <span>điểm</span></strong><p>Thu thập vật phẩm · giữ vị trí · hạ đối thủ</p></div>
       <div class="network-status" :class="networkState" role="status"><i aria-hidden="true" />{{ networkStatus }}</div>
     </section>
@@ -298,6 +313,11 @@ onUnmounted(() => {
         <div ref="arena" class="canvas-wrapper" aria-label="Chiến trường xe tăng">
           <div ref="gameContainer" class="game-canvas" />
           <div class="arena-label"><span class="live-mark" />{{ mapName }}<small>{{ assault ? 'Vòng sáng: tầm bắn · dấu mờ: vị trí cũ' : 'WASD di chuyển · Space khai hỏa' }}</small></div>
+          <div v-if="assault && mission" class="objective-hud" :class="{ secured: mission.secured, contested: mission.status === 'CONTESTED' }" aria-label="Mục tiêu hiện tại">
+            <span>ĐIỂM {{ mission.sector }} / {{ mission.sectorCount }} <b>{{ mission.secured ? '✓ ĐÃ GIỮ' : objectiveDistance !== null ? `${objectiveDistance} unit` : '⌖' }}</b></span>
+            <strong>{{ objectiveName }}</strong><progress :value="objectiveProgress" max="100" aria-label="Tiến độ giữ điểm" />
+          </div>
+          <div v-if="assault && nearbyWarning && alive" class="danger-hud" role="alert">⚠ Đạn nổ chậm · rời vòng cam!</div>
           <GameMinimap v-if="gameState" :state="gameState" game-type="TANK" :player-id="myPlayerId" />
           <div v-if="networkState !== 'online' && !isConnecting && !isGameOver" class="arena-network" role="status">{{ networkStatus }} · xe sẽ dừng khi mất input</div>
           <div v-if="isConnecting || (!gameState && !connectionError)" class="modal-overlay"><div class="spinner" /><h2>{{ isConnecting ? 'Kết nối đơn vị' : 'Đang chuẩn bị chiến trường' }}</h2><p>Đang chờ dữ liệu từ máy chủ…</p></div>
@@ -312,10 +332,12 @@ onUnmounted(() => {
         <div class="battle-footer"><span>{{ assault ? 'Đạn, nhiên liệu và hòm vật tư đều hữu hạn.' : 'W / S tiến lùi · A / D xoay thân · Space bắn' }}</span><button @click="helpOpen = !helpOpen">{{ helpOpen ? 'Ẩn hướng dẫn' : 'Hướng dẫn điều khiển' }} ↗</button></div>
       </section>
       <aside class="operations-panel" aria-label="Bảng điều hành xe tăng">
+        <section v-if="assault && mission" class="panel-section mission-panel"><div class="section-heading"><h2>Mệnh lệnh hành quân</h2><span>{{ mission.sector }}/{{ mission.sectorCount }} điểm</span></div><ol class="mission-route"><li v-for="(name,index) in operation.sectors" :key="name" :class="{ current: index === mission.sector-1, complete: index < mission.sector-1 || index === mission.sector-1 && mission.secured }"><i>{{ index < mission.sector-1 || index === mission.sector-1 && mission.secured ? '✓' : index+1 }}</i><span>{{ name }}</span></li></ol><p class="mission-directive">{{ objectiveStatus }}</p><p>Đứng trong vòng cờ, không có địch để giữ điểm. Tiến độ được giữ khi rời vòng. Giữ điểm và dọn đợt địch để mở chặng tiếp theo.</p><div class="mission-reward"><b>+{{ mission.rewardCredits }} tiếp tế</b><span>Kho hữu hạn: 6 đạn · 400 nhiên liệu · 1 bộ sửa</span></div><p class="enemy-hint"><i aria-hidden="true">◉</i> Lính áo vàng bắn đạn nổ chậm. Vòng cam báo trước 1,4 giây; đổi vị trí hoặc tìm vật che chắn.</p></section>
+        <details v-if="assault" class="panel-section history-panel"><summary><span>Hồ sơ lịch sử</span><b>{{ operation.context.era }}</b></summary><h3>{{ operation.context.title }}</h3><p>{{ operation.context.fact }}</p><a :href="operation.context.url" target="_blank" rel="noopener noreferrer">{{ operation.context.source }} ↗</a><p class="history-disclaimer">Địa hình, nhiệm vụ giữ điểm, đối thủ và thông số xe là sáng tác cho game; không tái hiện một trận đánh lịch sử hay lực lượng tại Dinh Độc Lập.</p></details>
         <section v-if="assault" class="panel-section observation-panel"><span class="eyebrow">QUAN SÁT CHIẾN TRƯỜNG</span><div class="contact-summary"><strong>{{ visibleContacts }}</strong><span>tiếp xúc đang thấy</span></div><p>{{ visibleContacts ? 'Địch chỉ hiện khi nằm trong tầm quan sát và không bị che khuất.' : 'Chưa có tiếp xúc trong tầm nhìn. Tiến lên thận trọng.' }}</p><small v-if="oldContacts">{{ oldContacts }} dấu vị trí cũ · tự mất sau 4 giây</small></section>
         <section v-if="assault" class="panel-section logistics-panel"><div class="section-heading"><h2>Hậu cần</h2><span>{{ tactical?.repairKits ?? '—' }} bộ sửa</span></div><button class="action-button" :disabled="!canSupply" @click="issueCommand('INTERACT')"><kbd>E</kbd><span><strong>{{ inventoryFull ? 'Đã đủ vật tư' : 'Nhận tiếp tế' }}</strong><small>{{ supplyLabel }}</small></span><b>↗</b></button><button class="action-button" :disabled="!canRepair" @click="issueCommand('REPAIR')"><kbd>F</kbd><span><strong>{{ repairing ? `Đang sửa · ${((tactical?.repairRemainingMs ?? 0) / 1000).toFixed(1)}s` : 'Sửa xe · 8 giây' }}</strong><small>{{ repairReason }}</small></span></button><progress v-if="repairing" class="repair-progress" :value="8000 - (tactical?.repairRemainingMs ?? 0)" max="8000" aria-label="Tiến độ sửa xe" /><p class="logistics-note">Di chuyển, bắn hoặc trúng đòn sẽ ngắt sửa và hoàn lại bộ sửa.</p></section>
         <div class="command-feedback" :class="{ 'has-feedback': commandNotice }" role="status" aria-live="polite">{{ commandNotice || 'Mọi thao tác được xác nhận từ máy chủ.' }}</div>
-        <details v-if="assault" class="panel-section upgrades-panel" :open="upgradesOpen" @toggle="upgradesOpen = ($event.target as HTMLDetailsElement).open"><summary><span>Nâng cấp xe</span><b>{{ myTank?.credits ?? 0 }} tiếp tế</b></summary><p class="upgrade-hint">Tối đa 3 cấp mỗi nhánh · giá 100 / 200 / 300.</p><button v-for="item in upgrades" :key="item.branch" class="upgrade-card" :disabled="!canControl || item.level >= 3 || !item.affordable || !!pendingUpgrade" @click="upgrade(item.branch)"><span class="upgrade-symbol" aria-hidden="true">{{ item.symbol }}</span><span class="upgrade-copy"><strong>{{ item.label }} <small>{{ item.level }}/3</small></strong><span>{{ item.detail }}</span><span class="level-pips" aria-hidden="true"><i v-for="level in 3" :key="level" :class="{ filled: level <= item.level }" /></span></span><span class="upgrade-cost">{{ pendingUpgrade?.branch === item.branch ? 'Đang gửi…' : item.level >= 3 ? 'Tối đa' : `${item.cost}` }}<small v-if="item.level < 3 && pendingUpgrade?.branch !== item.branch">{{ item.affordable ? 'Nâng cấp ↑' : `Thiếu ${item.cost - (myTank?.credits ?? 0)}` }}</small></span></button><p class="upgrade-hint">Hạ lính +25, hạ tank +100, qua đợt +75 tiếp tế.</p></details>
+        <details v-if="assault" class="panel-section upgrades-panel" :open="upgradesOpen" @toggle="upgradesOpen = ($event.target as HTMLDetailsElement).open"><summary><span>Nâng cấp xe</span><b>{{ myTank?.credits ?? 0 }} tiếp tế</b></summary><p class="upgrade-hint">Tối đa 3 cấp mỗi nhánh · giá 100 / 200 / 300.</p><button v-for="item in upgrades" :key="item.branch" class="upgrade-card" :disabled="!canControl || item.level >= 3 || !item.affordable || !!pendingUpgrade" @click="upgrade(item.branch)"><span class="upgrade-symbol" aria-hidden="true">{{ item.symbol }}</span><span class="upgrade-copy"><strong>{{ item.label }} <small>{{ item.level }}/3</small></strong><span>{{ item.detail }}</span><span class="level-pips" aria-hidden="true"><i v-for="level in 3" :key="level" :class="{ filled: level <= item.level }" /></span></span><span class="upgrade-cost">{{ pendingUpgrade?.branch === item.branch ? 'Đang gửi…' : item.level >= 3 ? 'Tối đa' : `${item.cost}` }}<small v-if="item.level < 3 && pendingUpgrade?.branch !== item.branch">{{ item.affordable ? 'Nâng cấp ↑' : `Thiếu ${item.cost - (myTank?.credits ?? 0)}` }}</small></span></button><p class="upgrade-hint">Hạ lính +25, hạ tank +100, giữ điểm +40, qua đợt +75 tiếp tế.</p></details>
         <details class="panel-section controls-help" :open="helpOpen" @toggle="helpOpen = ($event.target as HTMLDetailsElement).open"><summary>Điều khiển & quy tắc <span>?</span></summary><dl><div><dt><kbd>W</kbd> <kbd>S</kbd></dt><dd>Tiến / lùi</dd></div><div><dt><kbd>A</kbd> <kbd>D</kbd></dt><dd>Xoay thân xe</dd></div><div><dt><kbd>Space</kbd></dt><dd>{{ assault ? 'Bắn theo hướng nòng' : 'Khai hỏa' }}</dd></div><template v-if="assault"><div><dt>Chuột / chạm</dt><dd>Chọn điểm ngắm</dd></div><div><dt><kbd>E</kbd> / <kbd>F</kbd></dt><dd>Nhận vật tư / sửa xe</dd></div></template></dl><p v-if="assault">Giữ chuột trái hoặc Space để bắn khi pháo sẵn sàng. Đứng yên 1,5 giây để ổn định ngắm. Tháp pháo cần thời gian xoay tới hướng chọn.</p><p v-if="assault" class="caution-note">Tầm bắn {{ tactical?.range ?? 700 }} unit. Vật cản chặn đạn và vụ nổ; bắn gần có thể gây sát thương cho chính xe bạn. Vòng sáng chỉ biểu thị tầm bắn.</p><p v-else>Khiên chặn một phát trong tối đa 10 giây. Tăng tốc và bắn nhanh tồn tại 6 giây. Có thể dùng phím mũi tên để lái.</p></details>
         <section class="panel-section roster"><div class="section-heading"><h2>{{ assault ? 'Đội xe trong vùng' : 'Xe trong vùng nhìn' }}</h2><span>{{ team.length }} xe</span></div><div v-for="tank in team" :key="tank.playerId" class="roster-row" :class="{ me: tank.playerId === myPlayerId, destroyed: !tank.alive }"><i :style="{ background: tank.color || '#8fa88a' }" aria-hidden="true" /><div><strong>{{ playerName(tank.playerId) }}</strong><span>{{ tank.alive ? `${tank.health} HP` : 'Đã bị phá hủy' }}</span></div><b>{{ tank.score }}<small>điểm</small></b></div><p v-if="!team.length" class="upgrade-hint">Đang chờ đội xe vào trận…</p></section>
         <details class="panel-section global-rank-panel" @toggle="rankOpen = ($event.target as HTMLDetailsElement).open"><summary>Bảng xếp hạng Tank</summary><GlobalLeaderboard v-if="rankOpen" game-type="TANK" class="global-rank-card" /></details>
@@ -326,6 +348,40 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.objective-hud { position:absolute; z-index:9; right:14px; top:14px; width:220px; padding:10px 12px; background:#12221ded; border:1px solid #a18e51; border-radius:9px; pointer-events:none; box-shadow:0 5px 24px #0003 }
+.objective-hud>span { display:flex; justify-content:space-between; gap:8px; color:#c6bb96; font-size:9px; letter-spacing:.8px }
+.objective-hud>span b { letter-spacing:0; color:#e4c67a }
+.objective-hud>strong { display:block; margin:5px 0 8px; font-size:13px }
+.objective-hud progress { width:100%; height:4px; accent-color:#e4c67a }
+.objective-hud.secured { border-color:#6f9d78 }
+.objective-hud.secured>span b { color:#9cddad }
+.objective-hud.contested { border-color:#c98461 }
+.danger-hud { position:absolute; z-index:11; left:50%; top:110px; transform:translateX(-50%); width:max-content; max-width:calc(100% - 20px); border:1px solid #d89965; border-radius:7px; padding:9px 14px; background:#42251eee; color:#ffe1b9; font-size:12px; font-weight:700; pointer-events:none }
+.mission-route { list-style:none; display:grid; gap:7px; padding:0; margin:12px 0 }
+.mission-route li { display:flex; align-items:center; gap:9px; color:#92a296; font-size:11px }
+.mission-route i { font-style:normal; display:grid; place-items:center; width:23px; height:23px; border:1px solid #425448; border-radius:50%; font-size:10px }
+.mission-route .current { color:#f0d797; font-weight:650 }
+.mission-route .current i { background:#c5ac581c; border-color:#aa9251 }
+.mission-route .complete { color:#a2cda4 }
+.mission-panel>p,.history-panel>p { font-size:11px; line-height:1.65; color:#a2b3a9; margin:9px 0 }
+.mission-panel .mission-directive { color:#e4c67a; font-weight:650 }
+.mission-reward { padding:10px 0; border-top:1px solid #304139; border-bottom:1px solid #304139 }
+.mission-reward b { display:block; font-size:12px; color:#bad2a2 }
+.mission-reward span { display:block; font-size:10px; color:#a2b3a9; margin-top:4px; line-height:1.6 }
+.mission-panel .enemy-hint { color:#d6b895; margin-bottom:0 }
+.enemy-hint i { font-style:normal; color:#e3b660; margin-right:4px }
+.history-panel summary { display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; font-size:12px; font-weight:650 }
+.history-panel summary b { color:#cabb93; font-size:9px; font-weight:500 }
+.history-panel h3 { font-size:13px; line-height:1.5; color:#e4c67a; margin:14px 0 7px }
+.history-panel a { color:#b6cdb4; font-size:10px; line-height:1.6; text-underline-offset:3px }
+.history-panel .history-disclaimer { font-size:10px; color:#93a195; padding-top:9px; border-top:1px solid #304139 }
+@media(max-width:820px) { .mission-panel,.history-panel { grid-column:1/-1 }.mission-panel{order:0}.history-panel{order:4} }
+@media(max-width:540px) {
+  .objective-hud { top:auto; bottom:12px; right:9px; width:min(185px,calc(100% - 145px)); padding:8px }
+  .objective-hud>span { font-size:8px; letter-spacing:0 }.objective-hud>strong { font-size:10px; margin:4px 0 }
+  .danger-hud { top:70px; font-size:10px; padding:7px 10px }
+  .mission-route { grid-template-columns:1fr 1fr 1fr; gap:6px }.mission-route li{align-items:flex-start;font-size:10px;line-height:1.5;flex-direction:column;gap:5px}
+}
 .tank-game {
   --tank-line:#304139;
   --tank-muted:#a2b3a9;

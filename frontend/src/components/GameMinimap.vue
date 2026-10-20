@@ -70,6 +70,14 @@ function draw() {
       context.fillStyle = supply.quantity > 0 ? '#e2c074' : '#626855'
       context.fillRect(sx(supply.x) - 2, sy(supply.y) - 2, 4, 4)
     }
+    if (state.mode === 'ASSAULT' && state.mission) {
+      const mission = state.mission
+      context.strokeStyle = mission.secured ? '#9cddad' : '#e4c67a'
+      context.lineWidth = 1.5
+      context.beginPath(); context.ellipse(sx(mission.x), sy(mission.y), Math.max(4,mission.radius/worldWidth*width),Math.max(4,mission.radius/worldHeight*height),0,0,Math.PI*2); context.stroke()
+      context.fillStyle = context.strokeStyle; context.font = 'bold 9px sans-serif'; context.textAlign = 'center'
+      context.fillText(mission.secured ? '✓' : String(mission.sector),sx(mission.x),sy(mission.y)+3)
+    }
     for (const contact of state.contacts ?? []) if (!contact.current) {
       context.strokeStyle = '#bbaa8277'; context.strokeRect(sx(contact.x) - 2, sy(contact.y) - 2, 4, 4)
     }
